@@ -3,7 +3,7 @@
 	"package": "klumpler.recursivecraft.client.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
-		"ExampleClientMixin"
+      "RecipeDisplayEntryMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

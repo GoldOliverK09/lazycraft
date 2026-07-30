@@ -21,7 +21,7 @@ public class RecursiveCraft implements ModInitializer {
 		// However, some things (like resources) may still be uninitialized.
 		// Proceed with mild caution.
 
-		LOGGER.info("Hello Fabric world!");
+		LOGGER.info("Recursive Craft loaded!");
 	}
 
 	public static Identifier id(String path) {
