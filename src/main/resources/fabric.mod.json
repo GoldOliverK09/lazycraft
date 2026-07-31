@@ -3,17 +3,17 @@
 	"id": "recursivecraft",
 	"version": "${version}",
 	"name": "Recursive Craft",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"description": "A recursive crafting planner that automatically resolves and crafts item dependencies.",
 	"authors": [
-		"Me!"
+		"GoldOliverK09"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"sources": "https://github.com/GoldOliverK09/recursivecraft",
+		"issues": "https://github.com/GoldOliverK09/recursivecraft/issues"
 	},
-	"license": "CC0-1.0",
+	"license": "MIT",
 	"icon": "assets/recursivecraft/icon.png",
-	"environment": "*",
+	"environment": "client",
 	"entrypoints": {
 		"main": [
 			"klumpler.recursivecraft.RecursiveCraft"
