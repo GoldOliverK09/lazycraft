@@ -1,14 +1,15 @@
 {
-	"required": true,
-	"package": "klumpler.recursivecraft.client.mixin",
-	"compatibilityLevel": "JAVA_25",
-	"client": [
-      "RecipeDisplayEntryMixin"
-	],
-	"injectors": {
-		"defaultRequire": 1
-	},
-	"overwrites": {
-		"requireAnnotations": true
-	}
+  "required": true,
+  "package": "klumpler.recursivecraft.client.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "RecipeDisplayEntryMixin",
+    "ClientRecipeBookMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
 }
