@@ -1,6 +1,6 @@
 package klumpler.recursivecraft.client.mixin;
 
-import klumpler.recursivecraft.client.planner.RecursivePlanner;
+import klumpler.recursivecraft.client.planner.RecipeIndex;
 import net.minecraft.client.ClientRecipeBook;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import org.spongepowered.asm.mixin.Mixin;
@@ -18,6 +18,6 @@ public class ClientRecipeBookMixin {
 
     @Inject(method = "rebuildCollections", at = @At("TAIL"))
     private void recursivecraft$rebuildLookup(CallbackInfo ci) {
-        RecursivePlanner.rebuildLookup(this.allCollections);
+        RecipeIndex.rebuildLookup(this.allCollections);
     }
 }
