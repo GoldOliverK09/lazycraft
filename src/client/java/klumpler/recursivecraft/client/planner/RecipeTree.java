@@ -2,26 +2,29 @@ package klumpler.recursivecraft.client.planner;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.tags.TagKey;
 import net.minecraft.util.context.ContextMap;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
+import net.minecraft.world.item.crafting.display.SlotDisplay;
 import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
     private static final Logger LOGGER = LoggerFactory.getLogger("recursivecraft");
-    // Kept at three because this was the current project setting before this split.
-    private static final int DEFAULT_MAX_DEPTH = 3;
+    private static final int DEFAULT_MAX_DEPTH = 5;
 
     public static RecipeTree build(Item target) {
         return build(target, DEFAULT_MAX_DEPTH);
@@ -42,11 +45,13 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
     }
 
     public static void log(Item target) {
+        long start = System.nanoTime();
         log(target, DEFAULT_MAX_DEPTH);
+        LOGGER.info("Tree build took {} ms", (System.nanoTime() - start) / 1_000_000.0);
     }
 
     public static void log(Item target, int maxDepth) {
-        log(build(target, maxDepth), 0);
+        log(build(target, maxDepth), 0, 1);
     }
 
     private static RecipeTree build(
@@ -87,6 +92,15 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
 
             List<IngredientOption> ingredients = new ArrayList<>();
             for (Ingredient ingredient : requirements.get()) {
+                if (ingredient.display() instanceof SlotDisplay.TagSlotDisplay(TagKey<Item> tag)) {
+                    ingredients.add(new IngredientOption(
+                            ingredient,
+                            Optional.of(tag),
+                            List.of()
+                    ));
+                    continue;
+                }
+
                 List<RecipeTree> choices = new ArrayList<>();
                 for (ItemStack acceptedStack : ingredient.display().resolveForStacks(context)) {
                     if (!acceptedStack.isEmpty()) {
@@ -94,15 +108,21 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
                                 acceptedStack.getItem(),
                                 remainingDepth - 1,
                                 context,
-                                new HashSet<>(nextPath)
+                                nextPath
                         ));
                     }
                 }
 
-                ingredients.add(new IngredientOption(ingredient, List.copyOf(choices)));
+                ingredients.add(new IngredientOption(ingredient, Optional.empty(), List.copyOf(choices)));
             }
 
-            recipes.add(new RecipeOption(recipe, List.copyOf(ingredients)));
+            int outputCount = recipe.resultItems(context).stream()
+                    .filter(output -> output.is(item))
+                    .mapToInt(ItemStack::getCount)
+                    .sum();
+            if (outputCount > 0) {
+                recipes.add(new RecipeOption(recipe, outputCount, List.copyOf(ingredients)));
+            }
         }
 
         Stop stop = recipes.isEmpty() ? Stop.NO_CRAFTING_REQUIREMENTS : Stop.NONE;
@@ -114,16 +134,58 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
                 .anyMatch(stack -> stack.is(Items.CRAFTING_TABLE));
     }
 
-    private static void log(RecipeTree node, int indentation) {
-        LOGGER.info("{}{}{}", " ".repeat(indentation), itemName(node.item()), stopSuffix(node.stop()));
+    private static void log(RecipeTree node, int indentation, long requiredCount) {
+        logNode(node, indentation, requiredCount);
+        logChildren(node, indentation, requiredCount);
+    }
 
+    private static void logChildren(RecipeTree node, int indentation, long requiredCount) {
         for (RecipeOption recipe : node.recipes()) {
+            Map<Item, RecipeTree> choicesByItem = new LinkedHashMap<>();
+            Map<Item, Long> quantityByItem = new LinkedHashMap<>();
+            Map<TagKey<Item>, Long> quantityByTag = new LinkedHashMap<>();
+            long craftsRequired = divideRoundUp(requiredCount, recipe.outputCount());
+
             for (IngredientOption ingredient : recipe.ingredients()) {
+                if (ingredient.tag().isPresent()) {
+                    quantityByTag.merge(ingredient.tag().get(), craftsRequired, Long::sum);
+                    continue;
+                }
+
                 for (RecipeTree choice : ingredient.choices()) {
-                    log(choice, indentation + 1);
+                    choicesByItem.putIfAbsent(choice.item(), choice);
+                    quantityByItem.merge(choice.item(), craftsRequired, Long::sum);
                 }
             }
+
+            for (Map.Entry<Item, RecipeTree> entry : choicesByItem.entrySet()) {
+                log(entry.getValue(), indentation + 1, quantityByItem.get(entry.getKey()));
+            }
+
+            for (Map.Entry<TagKey<Item>, Long> entry : quantityByTag.entrySet()) {
+                logTag(entry.getKey(), indentation + 1, entry.getValue());
+            }
         }
+    }
+
+    private static void logNode(RecipeTree node, int indentation, long quantity) {
+        String count = quantity > 1 ? " x" + quantity : "";
+        LOGGER.info(
+                "{}{}{}{}",
+                "  ".repeat(indentation),
+                itemName(node.item()),
+                count,
+                stopSuffix(node.stop())
+        );
+    }
+
+    private static long divideRoundUp(long dividend, long divisor) {
+        return (dividend + divisor - 1) / divisor;
+    }
+
+    private static void logTag(TagKey<Item> tag, int indentation, long quantity) {
+        String count = quantity > 1 ? " x" + quantity : "";
+        LOGGER.info("{}#{}{}", "  ".repeat(indentation), tag.location(), count);
     }
 
     private static String stopSuffix(Stop stop) {
@@ -141,10 +203,14 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
         return BuiltInRegistries.ITEM.getKey(item).getPath();
     }
 
-    public record RecipeOption(RecipeDisplayEntry entry, List<IngredientOption> ingredients) {
+    public record RecipeOption(RecipeDisplayEntry entry, int outputCount, List<IngredientOption> ingredients) {
     }
 
-    public record IngredientOption(Ingredient ingredient, List<RecipeTree> choices) {
+    public record IngredientOption(
+            Ingredient ingredient,
+            Optional<TagKey<Item>> tag,
+            List<RecipeTree> choices
+    ) {
     }
 
     public enum Stop {
