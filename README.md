@@ -2,26 +2,30 @@
 
 A Minecraft mod that helps you craft items by automatically handling the crafting steps needed to make them.
 
-Ever wanted to craft something but realised you are missing five different ingredients that each need their own recipes? Recursive Craft aims to solve that by planning the crafting chain for you.
+Ever wanted to craft something but realized you are missing five different ingredients that each need their own recipes?
+
+Recursive Craft solves this by planning the crafting chain and handling the intermediate steps for you.
 
 ## Features
 
 - Automatically finds recipes needed to create an item
 - Recursively searches for missing ingredients
-- Supports recipes added by other mods
+- Detects recipes added by other mods
 - Helps choose the best crafting path (planned)
 - Configurable recursion depth (planned)
 
-## Development
+## Status
 
-This project is currently in development. Features and behaviour may change.
+This project is currently in early development. Features and behavior may change.
 
-## Future Plans
+## Roadmap
 
-- Recipe scoring system to choose better crafting routes
-- Improved handling of alternative recipes
-- More integration with the recipe book
-- User configuration options
+- ✅ Recipe indexing
+- ✅ Recursive recipe tree generation
+- ⬜ Recipe scoring system
+- ⬜ Automatic crafting execution
+- ⬜ Improved recipe book integration
+- ⬜ User configuration options
 
 ## License
 
