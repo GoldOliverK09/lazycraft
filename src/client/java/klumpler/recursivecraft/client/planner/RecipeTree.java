@@ -1,26 +1,27 @@
 package klumpler.recursivecraft.client.planner;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.tags.TagKey;
 import net.minecraft.util.context.ContextMap;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.client.Minecraft;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
 import net.minecraft.world.item.crafting.display.SlotDisplay;
-import net.minecraft.world.item.crafting.display.SlotDisplayContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.Item;
 
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.Optional;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
+
+import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
 
 public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
     private static final Logger LOGGER = LoggerFactory.getLogger("recursivecraft");
@@ -64,16 +65,11 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
             return new RecipeTree(item, List.of(), Stop.CYCLE);
         }
 
-        List<RecipeDisplayEntry> producers = RecipeIndex.recipesProducing(item);
-        if (producers.isEmpty()) {
-            return new RecipeTree(item, List.of(), Stop.RAW_MATERIAL);
-        }
-
-        List<RecipeDisplayEntry> craftingTableRecipes = producers.stream()
-                .filter(recipe -> usesCraftingTable(recipe, context))
+        List<RecipeDisplayEntry> stationRecipes = RecipeIndex.recipesProducing(item).stream()
+                .filter(recipe -> usesStation(recipe, Items.CRAFTING_TABLE, context))
                 .toList();
-        if (craftingTableRecipes.isEmpty()) {
-            return new RecipeTree(item, List.of(), Stop.UNAVAILABLE_AT_CRAFTING_TABLE);
+        if (stationRecipes.isEmpty()) {
+            return new RecipeTree(item, List.of(), Stop.RAW_MATERIAL);
         }
 
         if (remainingDepth == 0) {
@@ -84,7 +80,7 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
         nextPath.add(item);
         List<RecipeOption> recipes = new ArrayList<>();
 
-        for (RecipeDisplayEntry recipe : craftingTableRecipes) {
+        for (RecipeDisplayEntry recipe : stationRecipes) {
             Optional<List<Ingredient>> requirements = recipe.craftingRequirements();
             if (requirements.isEmpty()) {
                 continue;
@@ -129,9 +125,9 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
         return new RecipeTree(item, List.copyOf(recipes), stop);
     }
 
-    private static boolean usesCraftingTable(RecipeDisplayEntry recipe, ContextMap context) {
+    private static boolean usesStation(RecipeDisplayEntry recipe, Item station, ContextMap context) {
         return recipe.display().craftingStation().resolveForStacks(context).stream()
-                .anyMatch(stack -> stack.is(Items.CRAFTING_TABLE));
+                .anyMatch(stack -> stack.is(station));
     }
 
     private static void log(RecipeTree node, int indentation, long requiredCount) {
@@ -194,7 +190,6 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
             case DEPTH_LIMIT -> " [depth limit]";
             case CYCLE -> " [cycle]";
             case NO_LEVEL -> " [no level]";
-            case UNAVAILABLE_AT_CRAFTING_TABLE -> " [not craftable at crafting table]";
             case NO_CRAFTING_REQUIREMENTS -> " [no crafting requirements]";
         };
     }
@@ -219,7 +214,6 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
         DEPTH_LIMIT,
         CYCLE,
         NO_LEVEL,
-        UNAVAILABLE_AT_CRAFTING_TABLE,
         NO_CRAFTING_REQUIREMENTS
     }
 }
