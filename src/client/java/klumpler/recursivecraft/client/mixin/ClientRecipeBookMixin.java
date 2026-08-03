@@ -1,9 +1,11 @@
 package klumpler.recursivecraft.client.mixin;
 
 import klumpler.recursivecraft.client.planner.*;
+
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import net.minecraft.client.ClientRecipeBook;
 import net.minecraft.world.item.Items;
+
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.At;
