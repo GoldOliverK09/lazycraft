@@ -7,8 +7,11 @@ import net.minecraft.world.item.crafting.Ingredient;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.Predicate;
 
 public class InventorySnapshot {
     private final Map<Item, Integer> items;
@@ -41,8 +44,28 @@ public class InventorySnapshot {
         this.stacks = new ArrayList<>(stacks);
     }
 
+    public InventorySnapshot copy() {
+        return new InventorySnapshot(
+                items,
+                stacks.stream().map(ItemStack::copy).toList()
+        );
+    }
+
     public boolean canSatisfy(Ingredient ingredient) {
-        return false;
+        return canSatisfy(ingredient, 1);
+    }
+
+    public boolean canSatisfy(Ingredient ingredient, int quantity) {
+        validateQuantity(quantity);
+        return available(ingredient) >= quantity;
+    }
+
+    public int available(Ingredient ingredient) {
+        Objects.requireNonNull(ingredient, "ingredient cannot be null");
+        return stacks.stream()
+                .filter(ingredient)
+                .mapToInt(ItemStack::getCount)
+                .sum();
     }
 
     public int getAmount(Item item) {
@@ -50,26 +73,79 @@ public class InventorySnapshot {
     }
 
     public boolean has(Item item, int amount) {
+        validateQuantity(amount);
         return getAmount(item) >= amount;
     }
 
     public void add(Item item, int amount) {
-        items.merge(item, amount, Integer::sum);
+        validateQuantity(amount);
+        add(new ItemStack(item, amount));
+    }
+
+    public void add(ItemStack stack) {
+        Objects.requireNonNull(stack, "stack cannot be null");
+        if (stack.isEmpty()) {
+            return;
+        }
+
+        ItemStack copy = stack.copy();
+        stacks.add(copy);
+        items.merge(copy.getItem(), copy.getCount(), Integer::sum);
     }
 
     public boolean remove(Item item, int amount) {
-        int current = getAmount(item);
+        Objects.requireNonNull(item, "item cannot be null");
+        return consumeMatching(stack -> stack.is(item), amount);
+    }
 
-        if (current < amount) {
+    public boolean consume(Ingredient ingredient, int quantity) {
+        Objects.requireNonNull(ingredient, "ingredient cannot be null");
+        return consumeMatching(ingredient, quantity);
+    }
+
+    private boolean consumeMatching(Predicate<ItemStack> matcher, int quantity) {
+        validateQuantity(quantity);
+        if (quantity == 0) {
+            return true;
+        }
+
+        if (stacks.stream().filter(matcher).mapToInt(ItemStack::getCount).sum() < quantity) {
             return false;
         }
 
+        int remaining = quantity;
+        Iterator<ItemStack> iterator = stacks.iterator();
+        while (iterator.hasNext() && remaining > 0) {
+            ItemStack stack = iterator.next();
+            if (!matcher.test(stack)) {
+                continue;
+            }
+
+            int consumed = Math.min(stack.getCount(), remaining);
+            stack.shrink(consumed);
+            removeFromItemTotal(stack.getItem(), consumed);
+            remaining -= consumed;
+
+            if (stack.isEmpty()) {
+                iterator.remove();
+            }
+        }
+
+        return true;
+    }
+
+    private void removeFromItemTotal(Item item, int amount) {
+        int current = getAmount(item);
         if (current == amount) {
             items.remove(item);
         } else {
             items.put(item, current - amount);
         }
+    }
 
-        return true;
+    private static void validateQuantity(int quantity) {
+        if (quantity < 0) {
+            throw new IllegalArgumentException("quantity cannot be negative");
+        }
     }
 }

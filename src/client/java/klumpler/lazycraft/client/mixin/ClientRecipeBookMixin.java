@@ -20,7 +20,6 @@ public class ClientRecipeBookMixin {
     @Inject(method = "rebuildCollections", at = @At("TAIL"))
     private void lazycraft$rebuildLookup(CallbackInfo ci) {
         RecipeIndex.rebuildLookup(this.allCollections);
-        //RecipeTree.log(Items.HOPPER_MINECART);
-        RecipePlanner.log();
+        RecipeTree.log(Items.HOPPER_MINECART);
     }
 }
