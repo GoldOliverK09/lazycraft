@@ -1,13 +1,9 @@
 package klumpler.lazycraft.client;
 
 import klumpler.lazycraft.client.config.LazyCraftConfig;
+import klumpler.lazycraft.client.config.LazyCraftConfigScreen;
 import klumpler.lazycraft.client.planner.RecipePlanner;
 import me.shedaniel.autoconfig.AutoConfig;
-import me.shedaniel.autoconfig.ConfigManager;
-import me.shedaniel.autoconfig.gui.ConfigScreenProvider;
-import me.shedaniel.autoconfig.gui.DefaultGuiProviders;
-import me.shedaniel.autoconfig.gui.DefaultGuiTransformers;
-import me.shedaniel.autoconfig.gui.registry.GuiRegistry;
 import me.shedaniel.autoconfig.serializer.GsonConfigSerializer;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -18,21 +14,6 @@ import net.minecraft.world.item.ItemStack;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal;
 
 public class LazyCraftClient implements ClientModInitializer {
-	@SuppressWarnings("unchecked")
-	private static ConfigScreenProvider<LazyCraftConfig> configScreenProvider() {
-		GuiRegistry registry = new GuiRegistry();
-		DefaultGuiProviders.apply(registry);
-		DefaultGuiTransformers.apply(registry);
-
-		ConfigManager<LazyCraftConfig> manager = (ConfigManager<LazyCraftConfig>)
-				AutoConfig.getConfigHolder(LazyCraftConfig.class);
-		return new ConfigScreenProvider<>(manager, registry, null);
-	}
-
-	private static net.minecraft.client.gui.screens.Screen createConfigScreen() {
-		return configScreenProvider().get();
-	}
-
 	@Override
 	public void onInitializeClient() {
 		AutoConfig.register(LazyCraftConfig.class, GsonConfigSerializer::new);
@@ -71,7 +52,7 @@ public class LazyCraftClient implements ClientModInitializer {
 				return 0;
 			}).then(literal("config").executes(context -> {
 				Minecraft minecraft = Minecraft.getInstance();
-				minecraft.setScreenAndShow(createConfigScreen());
+				minecraft.setScreenAndShow(LazyCraftConfigScreen.create(null));
 				return 1;
 			})))
 		);

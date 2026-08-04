@@ -20,6 +20,9 @@
 		],
 		"client": [
 			"klumpler.lazycraft.client.LazyCraftClient"
+		],
+		"modmenu": [
+			"klumpler.lazycraft.client.integration.LazyCraftModMenuIntegration"
 		]
 	},
 	"mixins": [
