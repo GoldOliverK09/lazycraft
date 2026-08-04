@@ -198,15 +198,20 @@ public final class RecipePlanner {
                 Set<Item> path,
                 int depth
         ) {
+            Set<Item> acceptedItems = matchingItems(ingredient);
+            if (acceptedItems.isEmpty()) {
+                return List.of();
+            }
+
             InventorySnapshot directlyConsumed = start.inventory().copy();
-            if (directlyConsumed.consume(ingredient, quantity)) {
+            if (directlyConsumed.consumeItems(acceptedItems, quantity)) {
                 return List.of(start.withInventory(directlyConsumed));
             }
 
-            int missing = quantity - start.inventory().available(ingredient);
+            int missing = quantity - start.inventory().availableItems(acceptedItems);
             List<SearchResult> candidates = new ArrayList<>();
 
-            for (Item output : matchingItems(ingredient)) {
+            for (Item output : acceptedItems) {
                 int requiredOutputAmount = Math.addExact(
                         start.inventory().getAmount(output),
                         missing
@@ -221,8 +226,8 @@ public final class RecipePlanner {
                         true
                 )) {
                     InventorySnapshot consumedInventory = produced.inventory().copy();
-                    if (consumedInventory.consume(ingredient, quantity)) {
-                        candidates.add(produced.withInventory(consumedInventory));
+                    if (consumedInventory.consumeItems(acceptedItems, quantity)) {
+                        candidates.add(start.combine(produced, consumedInventory));
                     }
                 }
             }
@@ -312,6 +317,16 @@ public final class RecipePlanner {
 
         private SearchResult withInventory(InventorySnapshot inventory) {
             return new SearchResult(inventory, steps, totalIngredients);
+        }
+
+        private SearchResult combine(SearchResult next, InventorySnapshot inventory) {
+            List<CraftingStep> combinedSteps = new ArrayList<>(steps);
+            combinedSteps.addAll(next.steps);
+            return new SearchResult(
+                    inventory,
+                    combinedSteps,
+                    Math.addExact(totalIngredients, next.totalIngredients)
+            );
         }
 
         private SearchResult addStep(

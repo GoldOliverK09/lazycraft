@@ -6,13 +6,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.function.Predicate;
 
 public class InventorySnapshot {
@@ -75,8 +69,20 @@ public class InventorySnapshot {
                 .sum();
     }
 
+    public int availableItems(Collection<Item> acceptedItems) {
+        Objects.requireNonNull(acceptedItems, "acceptedItems cannot be null");
+        return stacks.stream()
+                .filter(stack -> acceptedItems.contains(stack.getItem()))
+                .mapToInt(ItemStack::getCount)
+                .sum();
+    }
+
     public int getAmount(Item item) {
-        return items.getOrDefault(item, 0);
+        Objects.requireNonNull(item, "item cannot be null");
+        return stacks.stream()
+                .filter(stack -> stack.is(item))
+                .mapToInt(ItemStack::getCount)
+                .sum();
     }
 
     public boolean has(Item item, int amount) {
@@ -110,6 +116,11 @@ public class InventorySnapshot {
         return consumeMatching(ingredient, quantity);
     }
 
+    public boolean consumeItems(Collection<Item> acceptedItems, int quantity) {
+        Objects.requireNonNull(acceptedItems, "acceptedItems cannot be null");
+        return consumeMatching(stack -> acceptedItems.contains(stack.getItem()), quantity);
+    }
+
     private boolean consumeMatching(Predicate<ItemStack> matcher, int quantity) {
         validateQuantity(quantity);
         if (quantity == 0) {
@@ -129,8 +140,9 @@ public class InventorySnapshot {
             }
 
             int consumed = Math.min(stack.getCount(), remaining);
+            Item consumedItem = stack.getItem();
             stack.shrink(consumed);
-            removeFromItemTotal(stack.getItem(), consumed);
+            removeFromItemTotal(consumedItem, consumed);
             remaining -= consumed;
 
             if (stack.isEmpty()) {
