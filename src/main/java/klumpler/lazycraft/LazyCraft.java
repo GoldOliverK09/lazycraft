@@ -2,8 +2,6 @@ package klumpler.lazycraft;
 
 import net.fabricmc.api.ModInitializer;
 
-import net.minecraft.resources.Identifier;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +22,4 @@ public class LazyCraft implements ModInitializer {
 		LOGGER.info("LazyCraft loaded!");
 	}
 
-	public static Identifier id(String path) {
-		return Identifier.fromNamespaceAndPath(MOD_ID, path);
-	}
 }

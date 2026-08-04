@@ -4,21 +4,23 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.Ingredient;
 
 import java.util.*;
 import java.util.function.Predicate;
 
-public class InventorySnapshot {
-    private final Map<Item, Integer> items;
+public final class InventorySnapshot {
     private final List<ItemStack> stacks;
 
-    public String display() {
-        return items.toString();
+    private InventorySnapshot(List<ItemStack> stacks) {
+        this.stacks = new ArrayList<>(stacks);
+    }
+
+    public static Optional<InventorySnapshot> fromCurrentPlayer() {
+        Player player = Minecraft.getInstance().player;
+        return player == null ? Optional.empty() : Optional.of(from(player));
     }
 
     public static InventorySnapshot from(Player player) {
-        Map<Item, Integer> items = new HashMap<>();
         List<ItemStack> stacks = new ArrayList<>();
         if (player == null) {
             throw new IllegalArgumentException("Player cannot be null");
@@ -28,45 +30,14 @@ public class InventorySnapshot {
             ItemStack stack = player.getInventory().getItem(slot);
 
             if (!stack.isEmpty()) {
-                items.merge(stack.getItem(), stack.getCount(), Integer::sum);
                 stacks.add(stack.copy());
             }
         }
-        return new InventorySnapshot(items, stacks);
-    }
-
-    public static Optional<InventorySnapshot> fromCurrentPlayer() {
-        Player player = Minecraft.getInstance().player;
-        return player == null ? Optional.empty() : Optional.of(from(player));
-    }
-
-    private InventorySnapshot(Map<Item, Integer> items, List<ItemStack> stacks) {
-        this.items = new HashMap<>(items);
-        this.stacks = new ArrayList<>(stacks);
+        return new InventorySnapshot(stacks);
     }
 
     public InventorySnapshot copy() {
-        return new InventorySnapshot(
-                items,
-                stacks.stream().map(ItemStack::copy).toList()
-        );
-    }
-
-    public boolean canSatisfy(Ingredient ingredient) {
-        return canSatisfy(ingredient, 1);
-    }
-
-    public boolean canSatisfy(Ingredient ingredient, int quantity) {
-        validateQuantity(quantity);
-        return available(ingredient) >= quantity;
-    }
-
-    public int available(Ingredient ingredient) {
-        Objects.requireNonNull(ingredient, "ingredient cannot be null");
-        return stacks.stream()
-                .filter(ingredient)
-                .mapToInt(ItemStack::getCount)
-                .sum();
+        return new InventorySnapshot(stacks.stream().map(ItemStack::copy).toList());
     }
 
     public int availableItems(Collection<Item> acceptedItems) {
@@ -90,11 +61,6 @@ public class InventorySnapshot {
         return getAmount(item) >= amount;
     }
 
-    public void add(Item item, int amount) {
-        validateQuantity(amount);
-        add(new ItemStack(item, amount));
-    }
-
     public void add(ItemStack stack) {
         Objects.requireNonNull(stack, "stack cannot be null");
         if (stack.isEmpty()) {
@@ -103,17 +69,6 @@ public class InventorySnapshot {
 
         ItemStack copy = stack.copy();
         stacks.add(copy);
-        items.merge(copy.getItem(), copy.getCount(), Integer::sum);
-    }
-
-    public boolean remove(Item item, int amount) {
-        Objects.requireNonNull(item, "item cannot be null");
-        return consumeMatching(stack -> stack.is(item), amount);
-    }
-
-    public boolean consume(Ingredient ingredient, int quantity) {
-        Objects.requireNonNull(ingredient, "ingredient cannot be null");
-        return consumeMatching(ingredient, quantity);
     }
 
     public boolean consumeItems(Collection<Item> acceptedItems, int quantity) {
@@ -140,9 +95,7 @@ public class InventorySnapshot {
             }
 
             int consumed = Math.min(stack.getCount(), remaining);
-            Item consumedItem = stack.getItem();
             stack.shrink(consumed);
-            removeFromItemTotal(consumedItem, consumed);
             remaining -= consumed;
 
             if (stack.isEmpty()) {
@@ -152,16 +105,6 @@ public class InventorySnapshot {
 
         return true;
     }
-
-    private void removeFromItemTotal(Item item, int amount) {
-        int current = getAmount(item);
-        if (current == amount) {
-            items.remove(item);
-        } else {
-            items.put(item, current - amount);
-        }
-    }
-
     private static void validateQuantity(int quantity) {
         if (quantity < 0) {
             throw new IllegalArgumentException("quantity cannot be negative");

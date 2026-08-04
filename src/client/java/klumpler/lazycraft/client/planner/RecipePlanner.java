@@ -28,6 +28,7 @@ public final class RecipePlanner {
         return plan(target, 1, config().scoringMode.scorer());
     }
 
+    @SuppressWarnings("unused")
     public static Optional<CraftPlan> plan(Item target, int quantity) {
         return plan(target, quantity, config().scoringMode.scorer());
     }
@@ -245,6 +246,7 @@ public final class RecipePlanner {
             return items;
         }
 
+        @SuppressWarnings("SameParameterValue")
         private boolean usesStation(RecipeDisplayEntry recipe, Item station) {
             return recipe.display().craftingStation().resolveForStacks(context).stream()
                     .anyMatch(stack -> stack.is(station));

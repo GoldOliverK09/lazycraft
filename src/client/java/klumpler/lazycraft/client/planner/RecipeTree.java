@@ -20,6 +20,7 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
     private static final Logger LOGGER = LoggerFactory.getLogger("lazycraft");
     private static final int DEFAULT_MAX_DEPTH = 5;
 
+    @SuppressWarnings("unused")
     public static RecipeTree build(Item target) {
         return build(target, DEFAULT_MAX_DEPTH);
     }
@@ -118,6 +119,7 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
         return new RecipeTree(item, List.copyOf(recipes), stop);
     }
 
+    @SuppressWarnings("SameParameterValue")
     private static boolean usesStation(RecipeDisplayEntry recipe, Item station, ContextMap context) {
         return recipe.display().craftingStation().resolveForStacks(context).stream()
                 .anyMatch(stack -> stack.is(station));

@@ -26,7 +26,6 @@
 		]
 	},
 	"mixins": [
-		"lazycraft.mixins.json",
 		{
 			"config": "lazycraft.client.mixins.json",
 			"environment": "client"
