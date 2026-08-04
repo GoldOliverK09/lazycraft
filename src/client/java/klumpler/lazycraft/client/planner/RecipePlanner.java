@@ -1,8 +1,8 @@
 package klumpler.lazycraft.client.planner;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.util.context.ContextMap;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -32,26 +32,13 @@ public final class RecipePlanner {
     }
 
     public static boolean log() {
-        Player player = Minecraft.getInstance().player;
-
-        if (player == null) {
+        Optional<InventorySnapshot> inventory = InventorySnapshot.fromCurrentPlayer();
+        if (inventory.isEmpty()) {
             LOGGER.info("Cannot log an inventory without an active player.");
             return false;
         }
 
-        LOGGER.info("Player: {}", player);
-        LOGGER.info("Inventory size: {}", player.getInventory().getContainerSize());
-
-        for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
-            ItemStack stack = player.getInventory().getItem(slot);
-
-            if (!stack.isEmpty()) {
-                LOGGER.info("Slot {}: {}", slot, stack);
-            }
-        }
-
-        InventorySnapshot inventory = InventorySnapshot.from(player);
-        LOGGER.info(inventory.display());
+        LOGGER.info(inventory.get().display());
         return true;
     }
 
@@ -64,12 +51,8 @@ public final class RecipePlanner {
     }
 
     public static Optional<CraftPlan> plan(Item target, int quantity, PlanScorer scorer) {
-        Player player = Minecraft.getInstance().player;
-        if (player == null) {
-            return Optional.empty();
-        }
-
-        return plan(target, quantity, InventorySnapshot.from(player), scorer);
+        return InventorySnapshot.fromCurrentPlayer()
+                .flatMap(inventory -> plan(target, quantity, inventory, scorer));
     }
 
     public static Optional<CraftPlan> plan(
@@ -97,9 +80,32 @@ public final class RecipePlanner {
                 scorer,
                 SlotDisplayContext.fromLevel(level)
         );
-        return search.produce(target, quantity, inventory.copy(), Set.of(), 0).stream()
+        return search.produce(target, quantity, inventory.copy(), Set.of(), 0, false).stream()
                 .min(search.comparator())
                 .map(search::toPlan);
+    }
+
+    public static void logPlan(CraftPlan plan) {
+        LOGGER.info(
+                "Craft plan for {} x{} ({} total ingredients):",
+                itemName(plan.target()),
+                plan.quantity(),
+                plan.totalIngredients()
+        );
+
+        for (int index = 0; index < plan.steps().size(); index++) {
+            CraftingStep step = plan.steps().get(index);
+            LOGGER.info(
+                    "  {}. Craft {} ({} recipe executions)",
+                    index + 1,
+                    itemName(step.output()),
+                    step.crafts()
+            );
+        }
+    }
+
+    private static String itemName(Item item) {
+        return BuiltInRegistries.ITEM.getKey(item).toString();
     }
 
     private static final class SearchContext {
@@ -120,9 +126,10 @@ public final class RecipePlanner {
                 int quantity,
                 InventorySnapshot inventory,
                 Set<Item> path,
-                int depth
+                int depth,
+                boolean mayUseExistingOutput
         ) {
-            if (inventory.has(item, quantity)) {
+            if (mayUseExistingOutput && inventory.has(item, quantity)) {
                 return List.of(SearchResult.empty(inventory));
             }
 
@@ -130,7 +137,7 @@ public final class RecipePlanner {
                 return List.of();
             }
 
-            int missing = quantity - inventory.getAmount(item);
+            int missing = mayUseExistingOutput ? quantity - inventory.getAmount(item) : quantity;
             Set<Item> nextPath = new HashSet<>(path);
             nextPath.add(item);
             List<SearchResult> candidates = new ArrayList<>();
@@ -227,7 +234,8 @@ public final class RecipePlanner {
                         requiredOutputAmount,
                         start.inventory().copy(),
                         path,
-                        depth
+                        depth,
+                        true
                 )) {
                     InventorySnapshot consumedInventory = produced.inventory().copy();
                     if (consumedInventory.consume(ingredient, quantity)) {

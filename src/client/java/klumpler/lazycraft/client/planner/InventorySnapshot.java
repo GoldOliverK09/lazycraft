@@ -1,5 +1,6 @@
 package klumpler.lazycraft.client.planner;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -11,6 +12,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Predicate;
 
 public class InventorySnapshot {
@@ -37,6 +39,11 @@ public class InventorySnapshot {
             }
         }
         return new InventorySnapshot(items, stacks);
+    }
+
+    public static Optional<InventorySnapshot> fromCurrentPlayer() {
+        Player player = Minecraft.getInstance().player;
+        return player == null ? Optional.empty() : Optional.of(from(player));
     }
 
     private InventorySnapshot(Map<Item, Integer> items, List<ItemStack> stacks) {
