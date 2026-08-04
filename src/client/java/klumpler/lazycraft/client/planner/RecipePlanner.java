@@ -1,5 +1,7 @@
 package klumpler.lazycraft.client.planner;
 
+import klumpler.lazycraft.client.config.LazyCraftConfig;
+import me.shedaniel.autoconfig.AutoConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.util.context.ContextMap;
@@ -9,45 +11,25 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
 import net.minecraft.world.item.crafting.display.SlotDisplayContext;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 public final class RecipePlanner {
     private static final Logger LOGGER = LoggerFactory.getLogger("lazycraft");
     private static final Item DEFAULT_STATION = Items.CRAFTING_TABLE;
-    private static final int MAX_SEARCH_DEPTH = 32;
     private static final int MAX_CANDIDATES_PER_LAYER = 64;
 
     private RecipePlanner() {
     }
 
-    public static boolean log() {
-        Optional<InventorySnapshot> inventory = InventorySnapshot.fromCurrentPlayer();
-        if (inventory.isEmpty()) {
-            LOGGER.info("Cannot log an inventory without an active player.");
-            return false;
-        }
-
-        LOGGER.info(inventory.get().display());
-        return true;
-    }
-
     public static Optional<CraftPlan> plan(Item target) {
-        return plan(target, 1, PlanScorers.LEAST_TOTAL_INGREDIENTS);
+        return plan(target, 1, config().scoringMode.scorer());
     }
 
     public static Optional<CraftPlan> plan(Item target, int quantity) {
-        return plan(target, quantity, PlanScorers.LEAST_TOTAL_INGREDIENTS);
+        return plan(target, quantity, config().scoringMode.scorer());
     }
 
     public static Optional<CraftPlan> plan(Item target, int quantity, PlanScorer scorer) {
@@ -78,19 +60,21 @@ public final class RecipePlanner {
                 target,
                 quantity,
                 scorer,
-                SlotDisplayContext.fromLevel(level)
+                SlotDisplayContext.fromLevel(level),
+                config().recursionDepth
         );
         return search.produce(target, quantity, inventory.copy(), Set.of(), 0, false).stream()
                 .min(search.comparator())
                 .map(search::toPlan);
     }
 
-    public static void logPlan(CraftPlan plan) {
+    public static void logPlan(CraftPlan plan, long time) {
         LOGGER.info(
-                "Craft plan for {} x{} ({} total ingredients):",
+                "Craft plan for {} x{} ({} total ingredients) (took {} ms):",
                 itemName(plan.target()),
                 plan.quantity(),
-                plan.totalIngredients()
+                plan.totalIngredients(),
+                (System.nanoTime() - time) / 1_000_000.0
         );
 
         for (int index = 0; index < plan.steps().size(); index++) {
@@ -108,18 +92,17 @@ public final class RecipePlanner {
         return BuiltInRegistries.ITEM.getKey(item).toString();
     }
 
-    private static final class SearchContext {
-        private final Item target;
-        private final int targetQuantity;
-        private final PlanScorer scorer;
-        private final ContextMap context;
+    private static LazyCraftConfig config() {
+        return AutoConfig.getConfigHolder(LazyCraftConfig.class).getConfig();
+    }
 
-        private SearchContext(Item target, int targetQuantity, PlanScorer scorer, ContextMap context) {
-            this.target = target;
-            this.targetQuantity = targetQuantity;
-            this.scorer = scorer;
-            this.context = context;
-        }
+    private record SearchContext(
+            Item target,
+            int targetQuantity,
+            PlanScorer scorer,
+            ContextMap context,
+            int maxSearchDepth
+    ) {
 
         private List<SearchResult> produce(
                 Item item,
@@ -133,7 +116,7 @@ public final class RecipePlanner {
                 return List.of(SearchResult.empty(inventory));
             }
 
-            if (depth >= MAX_SEARCH_DEPTH || path.contains(item)) {
+            if (depth >= maxSearchDepth || path.contains(item)) {
                 return List.of();
             }
 
