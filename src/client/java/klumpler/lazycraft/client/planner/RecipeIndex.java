@@ -1,23 +1,22 @@
-package klumpler.recursivecraft.client.planner;
+package klumpler.lazycraft.client.planner;
 
-import net.minecraft.world.item.crafting.display.SlotDisplayContext;
-import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Item;
-import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import net.minecraft.util.context.ContextMap;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
+import net.minecraft.world.item.crafting.display.SlotDisplayContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.slf4j.LoggerFactory;
-import org.slf4j.Logger;
-
 public final class RecipeIndex {
-    private static final Logger LOGGER = LoggerFactory.getLogger("recursivecraft");
+    private static final Logger LOGGER = LoggerFactory.getLogger("lazycraft");
     private static volatile Map<Item, List<RecipeDisplayEntry>> recipesByOutput = Map.of();
 
     private RecipeIndex() {

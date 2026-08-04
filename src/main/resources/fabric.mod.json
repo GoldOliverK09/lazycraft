@@ -1,31 +1,31 @@
 {
 	"schemaVersion": 1,
-	"id": "recursivecraft",
+	"id": "lazycraft",
 	"version": "${version}",
-	"name": "Recursive Craft",
+	"name": "LazyCraft",
 	"description": "A recursive crafting planner that automatically resolves and crafts item dependencies.",
 	"authors": [
 		"GoldOliverK09"
 	],
 	"contact": {
-		"sources": "https://github.com/GoldOliverK09/recursivecraft",
-		"issues": "https://github.com/GoldOliverK09/recursivecraft/issues"
+		"sources": "https://github.com/GoldOliverK09/lazy-craft",
+		"issues": "https://github.com/GoldOliverK09/lazy-craft/issues"
 	},
 	"license": "MIT",
-	"icon": "assets/recursivecraft/icon.png",
+	"icon": "assets/lazycraft/icon.png",
 	"environment": "client",
 	"entrypoints": {
 		"main": [
-			"klumpler.recursivecraft.RecursiveCraft"
+			"klumpler.lazycraft.LazyCraft"
 		],
 		"client": [
-			"klumpler.recursivecraft.client.RecursiveCraftClient"
+			"klumpler.lazycraft.client.LazyCraftClient"
 		]
 	},
 	"mixins": [
-		"recursivecraft.mixins.json",
+		"lazycraft.mixins.json",
 		{
-			"config": "recursivecraft.client.mixins.json",
+			"config": "lazycraft.client.mixins.json",
 			"environment": "client"
 		}
 	],

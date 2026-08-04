@@ -1,4 +1,4 @@
-package klumpler.recursivecraft.client.planner;
+package klumpler.lazycraft.client.planner;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;

@@ -18,7 +18,7 @@ loom {
 	splitEnvironmentSourceSets()
 
 	mods {
-		"recursivecraft" {
+		"lazycraft" {
 			sourceSet sourceSets.main
 			sourceSet sourceSets.client
 		}

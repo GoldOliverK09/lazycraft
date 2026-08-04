@@ -1,4 +1,4 @@
-package klumpler.recursivecraft.client.mixin;
+package klumpler.lazycraft.client.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.minecraft.world.entity.player.StackedItemContents;

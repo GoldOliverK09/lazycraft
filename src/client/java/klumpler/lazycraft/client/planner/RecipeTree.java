@@ -1,30 +1,23 @@
-package klumpler.recursivecraft.client.planner;
+package klumpler.lazycraft.client.planner;
 
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.util.context.ContextMap;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.tags.TagKey;
-import net.minecraft.world.item.crafting.display.SlotDisplayContext;
-import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
-import net.minecraft.world.item.crafting.display.SlotDisplay;
-import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.util.context.ContextMap;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.Item;
-
-import java.util.LinkedHashMap;
-import java.util.ArrayList;
-import java.util.Optional;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import org.slf4j.LoggerFactory;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
+import net.minecraft.world.item.crafting.display.SlotDisplay;
+import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.*;
 
 public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
-    private static final Logger LOGGER = LoggerFactory.getLogger("recursivecraft");
+    private static final Logger LOGGER = LoggerFactory.getLogger("lazycraft");
     private static final int DEFAULT_MAX_DEPTH = 5;
 
     public static RecipeTree build(Item target) {

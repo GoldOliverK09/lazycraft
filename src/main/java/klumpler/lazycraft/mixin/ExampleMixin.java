@@ -1,4 +1,4 @@
-package klumpler.recursivecraft.mixin;
+package klumpler.lazycraft.mixin;
 
 import net.minecraft.server.MinecraftServer;
 import org.spongepowered.asm.mixin.Mixin;

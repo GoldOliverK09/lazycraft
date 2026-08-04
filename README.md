@@ -1,10 +1,10 @@
-# Recursive Craft
+# LazyCraft
 
 A Minecraft mod that helps you craft items by automatically handling the crafting steps needed to make them.
 
 Ever wanted to craft something but realized you are missing five different ingredients that each need their own recipes?
 
-Recursive Craft solves this by planning the crafting chain and handling the intermediate steps for you.
+LazyCraft solves this by planning the crafting chain and handling the intermediate steps for you.
 
 ## Features
 
