@@ -1,8 +1,10 @@
 package klumpler.lazycraft.client.mixin;
 
+import klumpler.lazycraft.client.config.LazyCraftConfig;
 import klumpler.lazycraft.client.planner.CraftingExecutor;
 import klumpler.lazycraft.client.planner.CraftingStep;
 import klumpler.lazycraft.client.planner.RecipePlanner;
+import me.shedaniel.autoconfig.AutoConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
@@ -35,22 +37,39 @@ public abstract class RecipeBookComponentMixin {
             boolean useMaxItems,
             CallbackInfoReturnable<Boolean> cir
     ) {
+        LazyCraftConfig config = AutoConfig.getConfigHolder(LazyCraftConfig.class).getConfig();
+        if (!config.recipeBookCrafting) {
+            return;
+        }
+
         if (CraftingExecutor.isExecuting()) {
             return;
         }
 
-        // The first click is handled by vanilla and displays or places the
-        // selected recipe. Further clicks on that recipe use LazyCraft.
-        if (!recipe.equals(lazycraft$armedGhostRecipe)) {
-            lazycraft$armedGhostRecipe = recipe;
-            lazycraft$armedGhostCollection = recipeCollection;
-            return;
-        }
-
         if (recipeCollection.isCraftable(recipe)) {
+            // The first click is handled by vanilla and places the recipe.
+            // Further clicks on it use LazyCraft's direct crafting shortcut.
+            if (!recipe.equals(lazycraft$armedGhostRecipe)) {
+                lazycraft$armedGhostRecipe = recipe;
+                lazycraft$armedGhostCollection = recipeCollection;
+                return;
+            }
+
             if (lazycraft$executeVanillaRecipe(recipeCollection, recipe)) {
                 cir.setReturnValue(true);
             }
+            return;
+        }
+
+        if (!config.recursiveRecipeBookCrafting) {
+            return;
+        }
+
+        // The first click is handled by vanilla and displays the ghost recipe.
+        // Further clicks on it confirm LazyCraft's recursive crafting action.
+        if (!recipe.equals(lazycraft$armedGhostRecipe)) {
+            lazycraft$armedGhostRecipe = recipe;
+            lazycraft$armedGhostCollection = recipeCollection;
             return;
         }
 
@@ -62,7 +81,10 @@ public abstract class RecipeBookComponentMixin {
     @Inject(method = "slotClicked", at = @At("HEAD"), cancellable = true)
     private void lazycraft$executeGhostOutput(Slot slot, CallbackInfo ci) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (CraftingExecutor.isExecuting()
+        LazyCraftConfig config = AutoConfig.getConfigHolder(LazyCraftConfig.class).getConfig();
+        if (!config.recipeBookCrafting
+                || !config.recursiveRecipeBookCrafting
+                || CraftingExecutor.isExecuting()
                 || lazycraft$armedGhostRecipe == null
                 || lazycraft$armedGhostCollection == null
                 || !(minecraft.player != null && minecraft.player.containerMenu instanceof CraftingMenu menu)

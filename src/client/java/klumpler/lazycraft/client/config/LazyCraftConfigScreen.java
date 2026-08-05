@@ -21,10 +21,28 @@ public final class LazyCraftConfigScreen {
                 .setParentScreen(parent)
                 .setTitle(Component.translatable("text.autoconfig.lazycraft.title"))
                 .setSavingRunnable(holder::save);
-        ConfigCategory general = builder.getOrCreateCategory(
-                Component.translatable("text.autoconfig.lazycraft.title"));
+        ConfigCategory recipeBookCrafting = builder.getOrCreateCategory(
+                Component.translatable("text.autoconfig.lazycraft.category.recipe_book_crafting"));
+        ConfigCategory recursiveCrafting = builder.getOrCreateCategory(
+                Component.translatable("text.autoconfig.lazycraft.category.recursive_crafting"));
 
-        general.addEntry(builder.entryBuilder()
+        recipeBookCrafting.addEntry(builder.entryBuilder()
+                .startBooleanToggle(
+                        Component.translatable("text.autoconfig.lazycraft.option.recipeBookCrafting"),
+                        config.recipeBookCrafting)
+                .setDefaultValue(true)
+                .setSaveConsumer(value -> config.recipeBookCrafting = value)
+                .build());
+
+        recipeBookCrafting.addEntry(builder.entryBuilder()
+                .startBooleanToggle(
+                        Component.translatable("text.autoconfig.lazycraft.option.recursiveRecipeBookCrafting"),
+                        config.recursiveRecipeBookCrafting)
+                .setDefaultValue(true)
+                .setSaveConsumer(value -> config.recursiveRecipeBookCrafting = value)
+                .build());
+
+        recursiveCrafting.addEntry(builder.entryBuilder()
                 .startIntSlider(
                         Component.translatable("text.autoconfig.lazycraft.option.recursionDepth"),
                         config.recursionDepth,
@@ -34,7 +52,7 @@ public final class LazyCraftConfigScreen {
                 .setSaveConsumer(value -> config.recursionDepth = value)
                 .build());
 
-        general.addEntry(builder.entryBuilder()
+        recursiveCrafting.addEntry(builder.entryBuilder()
                 .startEnumSelector(
                         Component.translatable("text.autoconfig.lazycraft.option.scoringMode"),
                         LazyCraftConfig.ScoringMode.class,

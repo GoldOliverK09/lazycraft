@@ -1,10 +1,15 @@
 {
   "modmenu.nameTranslation.lazycraft": "LazyCraft",
-  "modmenu.summaryTranslation.lazycraft": "A recursive crafting planner.",
-  "modmenu.descriptionTranslation.lazycraft": "A recursive crafting planner that automatically resolves and crafts item dependencies.",
+  "modmenu.summaryTranslation.lazycraft": "A crafting quality-of-life mod.",
+  "modmenu.descriptionTranslation.lazycraft": "Lazy ways to make crafting intuitive",
   "text.autoconfig.lazycraft.title": "LazyCraft",
+  "text.autoconfig.lazycraft.category.recipe_book_crafting": "Recipe Book Crafting",
+  "text.autoconfig.lazycraft.category.recursive_crafting": "Recursive Crafting",
+  "text.autoconfig.lazycraft.option.recipeBookCrafting": "Enable recipe book crafting",
+  "text.autoconfig.lazycraft.option.recursiveRecipeBookCrafting": "Enable recursive recipe book crafting",
   "text.autoconfig.lazycraft.option.recursionDepth": "Maximum recursion depth",
   "text.autoconfig.lazycraft.option.scoringMode": "Scoring method",
   "text.lazycraft.scoring_mode.least_total_ingredients": "Least total ingredients",
-  "text.lazycraft.scoring_mode.fewest_steps": "Fewest crafting steps"
+  "text.lazycraft.scoring_mode.fewest_steps": "Fewest crafting steps",
+  "text.lazycraft.scoring_mode.fewest_recipe_executions": "Fewest recipe executions"
 }
