@@ -10,7 +10,6 @@ import org.spongepowered.asm.mixin.injection.At;
 public class RecipeDisplayEntryMixin {
     @ModifyReturnValue(method = "canCraft", at = @At("RETURN"))
     private boolean modifyCanCraft(boolean original, StackedItemContents providedContents) {
-        // Saving this for when my crafting algorithm can safely return a true or false
-        return original;
+        return original;// Recursive test
     }
 }

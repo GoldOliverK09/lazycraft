@@ -7,9 +7,10 @@ version = project.mod_version
 group = project.maven_group
 
 repositories {
-	exclusiveContent {
-		forRepository {
-			maven {
+    exclusiveContent {
+        forRepository {
+            //noinspection ForeignDelegate
+            maven {
 				name = "Modrinth"
 				url = "https://api.modrinth.com/maven"
 			}
@@ -25,7 +26,9 @@ loom {
 
 	mods {
 		"lazycraft" {
+            //noinspection GroovyAssignabilityCheck,GrUnresolvedAccess
 			sourceSet sourceSets.main
+            //noinspection GroovyAssignabilityCheck,GrUnresolvedAccess
 			sourceSet sourceSets.client
 		}
 	}
@@ -78,6 +81,7 @@ jar {
 publishing {
 	publications {
 		create("mavenJava", MavenPublication) {
+            //noinspection GroovyAssignabilityCheck,GrUnresolvedAccess
 			from components.java
 		}
 	}

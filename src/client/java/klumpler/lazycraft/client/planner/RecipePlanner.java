@@ -24,6 +24,10 @@ public final class RecipePlanner {
     private RecipePlanner() {
     }
 
+    public static boolean canCraft(Item target) {
+        return plan(target).isPresent();
+    }
+
     public static Optional<CraftPlan> plan(Item target) {
         return plan(target, 1, config().scoringMode.scorer());
     }
