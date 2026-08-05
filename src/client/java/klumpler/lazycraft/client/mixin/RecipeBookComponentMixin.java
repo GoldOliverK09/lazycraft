@@ -6,24 +6,42 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import net.minecraft.util.context.ContextMap;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
 import net.minecraft.world.item.crafting.display.RecipeDisplayId;
 import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(RecipeBookComponent.class)
 public abstract class RecipeBookComponentMixin {
+    @Unique
+    private RecipeDisplayId lazycraft$armedGhostRecipe;
+
     @Inject(method = "tryPlaceRecipe", at = @At("HEAD"), cancellable = true)
     private void lazycraft$executeGhostRecipePlan(
-            RecipeCollection collection,
-            RecipeDisplayId recipeId,
-            boolean shiftDown,
+            RecipeCollection recipeCollection,
+            RecipeDisplayId recipe,
+            boolean useMaxItems,
             CallbackInfoReturnable<Boolean> cir
     ) {
-        if (collection.isCraftable(recipeId) || CraftingExecutor.isExecuting()) {
+        if (recipeCollection.isCraftable(recipe)) {
+            lazycraft$armedGhostRecipe = null;
+            return;
+        }
+
+        if (CraftingExecutor.isExecuting()) {
+            return;
+        }
+
+        // The first click is handled by vanilla and displays the ghost recipe.
+        // Once that recipe is selected, every further click on it confirms it
+        // for LazyCraft, until the player selects a different recipe.
+        if (!recipe.equals(lazycraft$armedGhostRecipe)) {
+            lazycraft$armedGhostRecipe = recipe;
             return;
         }
 
@@ -32,8 +50,8 @@ public abstract class RecipeBookComponentMixin {
             return;
         }
 
-        RecipeDisplayEntry entry = collection.getRecipes().stream()
-                .filter(recipe -> recipe.id().equals(recipeId))
+        RecipeDisplayEntry entry = recipeCollection.getRecipes().stream()
+                .filter(recipeEntry -> recipeEntry.id().equals(recipe))
                 .findFirst()
                 .orElse(null);
         if (entry == null) {
@@ -44,7 +62,7 @@ public abstract class RecipeBookComponentMixin {
         entry.resultItems(context).stream()
                 .filter(stack -> !stack.isEmpty())
                 .findFirst()
-                .map(stack -> stack.getItem())
+                .map(ItemStack::getItem)
                 .flatMap(RecipePlanner::plan)
                 .filter(plan -> !plan.steps().isEmpty())
                 .filter(CraftingExecutor::execute)
