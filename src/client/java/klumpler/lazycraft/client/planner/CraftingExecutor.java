@@ -21,7 +21,7 @@ import java.util.*;
 public final class CraftingExecutor {
     private static final Logger LOGGER = LoggerFactory.getLogger("lazycraft");
     private static final int UPDATE_TIMEOUT_TICKS = 40;
-    private static final Deque<CraftingStep> queuedSteps = new ArrayDeque<>();
+    private static final Deque<QueuedCraft> queuedSteps = new ArrayDeque<>();
     private static ActiveCraft activeCraft;
 
     private CraftingExecutor() {
@@ -62,7 +62,33 @@ public final class CraftingExecutor {
         return executeSteps(plan.steps());
     }
 
+    /**
+     * Executes a plan and leaves its final crafted result on the player's cursor.
+     * Dependency results still use quick-move so later recipes can use them.
+     */
+    public static boolean executeToCursor(CraftPlan plan) {
+        Objects.requireNonNull(plan, "plan cannot be null");
+        if (plan.steps().isEmpty()) {
+            return false;
+        }
+
+        List<QueuedCraft> queuedCrafts = new ArrayList<>(plan.steps().size());
+        for (int index = 0; index < plan.steps().size(); index++) {
+            queuedCrafts.add(new QueuedCraft(
+                    plan.steps().get(index),
+                    index == plan.steps().size() - 1
+            ));
+        }
+        return executeQueuedSteps(queuedCrafts);
+    }
+
     private static boolean executeSteps(List<CraftingStep> steps) {
+        return executeQueuedSteps(steps.stream()
+                .map(step -> new QueuedCraft(step, false))
+                .toList());
+    }
+
+    private static boolean executeQueuedSteps(List<QueuedCraft> steps) {
         if (activeCraft != null || !queuedSteps.isEmpty() || steps.isEmpty()) {
             return false;
         }
@@ -123,8 +149,9 @@ public final class CraftingExecutor {
     }
 
     private static void startNextStep(Minecraft minecraft, CraftingMenu menu) {
-        CraftingStep step = queuedSteps.removeFirst();
-        activeCraft = new ActiveCraft(step, menu.containerId, step.crafts());
+        QueuedCraft queuedCraft = queuedSteps.removeFirst();
+        CraftingStep step = queuedCraft.step();
+        activeCraft = new ActiveCraft(step, menu.containerId, step.crafts(), queuedCraft.takeResultToCursor());
         placeRecipe(minecraft, activeCraft, menu);
     }
 
@@ -148,7 +175,7 @@ public final class CraftingExecutor {
                 menu.containerId,
                 menu.getResultSlot().index,
                 0,
-                ContainerInput.QUICK_MOVE,
+                active.takeResultToCursor() ? ContainerInput.PICKUP : ContainerInput.QUICK_MOVE,
                 minecraft.player
         );
     }
@@ -173,18 +200,23 @@ public final class CraftingExecutor {
         WAITING_FOR_CRAFT
     }
 
+    private record QueuedCraft(CraftingStep step, boolean takeResultToCursor) {
+    }
+
     private static final class ActiveCraft {
         private final CraftingStep step;
         private final int containerId;
+        private final boolean takeResultToCursor;
         private int remainingCrafts;
         private int expectedStateId;
         private int ticksWaiting;
         private Phase phase = Phase.WAITING_FOR_PLACEMENT;
 
-        private ActiveCraft(CraftingStep step, int containerId, int remainingCrafts) {
+        private ActiveCraft(CraftingStep step, int containerId, int remainingCrafts, boolean takeResultToCursor) {
             this.step = step;
             this.containerId = containerId;
             this.remainingCrafts = remainingCrafts;
+            this.takeResultToCursor = takeResultToCursor;
         }
 
         private CraftingStep step() {
@@ -193,6 +225,10 @@ public final class CraftingExecutor {
 
         private int containerId() {
             return containerId;
+        }
+
+        private boolean takeResultToCursor() {
+            return takeResultToCursor;
         }
 
         private int remainingCrafts() {
