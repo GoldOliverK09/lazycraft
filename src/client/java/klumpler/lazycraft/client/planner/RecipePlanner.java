@@ -7,7 +7,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.util.context.ContextMap;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
 import net.minecraft.world.item.crafting.display.SlotDisplayContext;
@@ -18,7 +17,6 @@ import java.util.*;
 
 public final class RecipePlanner {
     private static final Logger LOGGER = LoggerFactory.getLogger("lazycraft");
-    private static final Item DEFAULT_STATION = Items.CRAFTING_TABLE;
     private static final int MAX_CANDIDATES_PER_LAYER = 64;
 
     private RecipePlanner() {
@@ -66,6 +64,7 @@ public final class RecipePlanner {
                 quantity,
                 scorer,
                 SlotDisplayContext.fromLevel(level),
+                CraftingGrid.current().orElse(CraftingGrid.CRAFTING_TABLE),
                 config().recursionDepth
         );
         return search.produce(target, quantity, inventory.copy(), Set.of(), 0, false).stream()
@@ -106,6 +105,7 @@ public final class RecipePlanner {
             int targetQuantity,
             PlanScorer scorer,
             ContextMap context,
+            CraftingGrid craftingGrid,
             int maxSearchDepth
     ) {
 
@@ -131,7 +131,7 @@ public final class RecipePlanner {
             List<SearchResult> candidates = new ArrayList<>();
 
             for (RecipeDisplayEntry recipe : RecipeIndex.recipesProducing(item)) {
-                if (!usesStation(recipe, DEFAULT_STATION)) {
+                if (!craftingGrid.supports(recipe, context)) {
                     continue;
                 }
 
@@ -248,12 +248,6 @@ public final class RecipePlanner {
                 }
             }
             return items;
-        }
-
-        @SuppressWarnings("SameParameterValue")
-        private boolean usesStation(RecipeDisplayEntry recipe, Item station) {
-            return recipe.display().craftingStation().resolveForStacks(context).stream()
-                    .anyMatch(stack -> stack.is(station));
         }
 
         private int outputCount(RecipeDisplayEntry recipe, Item item) {

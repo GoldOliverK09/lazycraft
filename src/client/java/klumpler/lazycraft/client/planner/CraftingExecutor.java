@@ -3,10 +3,9 @@ package klumpler.lazycraft.client.planner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.util.context.ContextMap;
+import net.minecraft.world.inventory.AbstractCraftingMenu;
 import net.minecraft.world.inventory.ContainerInput;
-import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
 import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 import org.slf4j.Logger;
@@ -28,7 +27,7 @@ public final class CraftingExecutor {
     }
 
     /**
-     * Starts one execution of the first crafting-table recipe that produces {@code target}.
+     * Starts one execution of the first recipe compatible with the current crafting grid.
      * Planner code should prefer {@link #execute(CraftingStep)} so it retains its chosen recipe.
      */
     public static boolean execute(Item target) {
@@ -39,9 +38,14 @@ public final class CraftingExecutor {
             return false;
         }
 
+        Optional<CraftingGrid> craftingGrid = CraftingGrid.current();
+        if (craftingGrid.isEmpty()) {
+            return false;
+        }
+
         ContextMap context = SlotDisplayContext.fromLevel(level);
         Optional<RecipeDisplayEntry> recipe = RecipeIndex.recipesProducing(target).stream()
-                .filter(entry -> usesCraftingTable(entry, context))
+                .filter(entry -> craftingGrid.get().supports(entry, context))
                 .findFirst();
         return recipe.map(entry -> execute(new CraftingStep(entry, target, 1))).orElse(false);
     }
@@ -94,7 +98,7 @@ public final class CraftingExecutor {
         }
 
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null || minecraft.gameMode == null || !(minecraft.player.containerMenu instanceof CraftingMenu menu)) {
+        if (minecraft.player == null || minecraft.gameMode == null || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
             return false;
         }
 
@@ -111,9 +115,9 @@ public final class CraftingExecutor {
             return;
         }
 
-        if (minecraft.player == null || minecraft.gameMode == null || !(minecraft.player.containerMenu instanceof CraftingMenu menu)
+        if (minecraft.player == null || minecraft.gameMode == null || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
                 || menu.containerId != activeCraft.containerId()) {
-            stop("the crafting table was closed");
+            stop("the crafting grid was closed");
             return;
         }
 
@@ -148,21 +152,21 @@ public final class CraftingExecutor {
         return activeCraft != null || !queuedSteps.isEmpty();
     }
 
-    private static void startNextStep(Minecraft minecraft, CraftingMenu menu) {
+    private static void startNextStep(Minecraft minecraft, AbstractCraftingMenu menu) {
         QueuedCraft queuedCraft = queuedSteps.removeFirst();
         CraftingStep step = queuedCraft.step();
         activeCraft = new ActiveCraft(step, menu.containerId, step.crafts(), queuedCraft.takeResultToCursor());
         placeRecipe(minecraft, activeCraft, menu);
     }
 
-    private static void placeRecipe(Minecraft minecraft, ActiveCraft active, CraftingMenu menu) {
+    private static void placeRecipe(Minecraft minecraft, ActiveCraft active, AbstractCraftingMenu menu) {
         active.phase(Phase.WAITING_FOR_PLACEMENT);
         active.expectedStateId(menu.getStateId());
         active.ticksWaiting(0);
         minecraft.gameMode.handlePlaceRecipe(menu.containerId, active.step().recipe().id(), false);
     }
 
-    private static void takeResult(Minecraft minecraft, ActiveCraft active, CraftingMenu menu) {
+    private static void takeResult(Minecraft minecraft, ActiveCraft active, AbstractCraftingMenu menu) {
         if (!menu.getResultSlot().getItem().is(active.step().output())) {
             stop("the server could not place " + itemName(active.step().output()));
             return;
@@ -184,11 +188,6 @@ public final class CraftingExecutor {
         LOGGER.warn("Stopped crafting executor: {}", reason);
         activeCraft = null;
         queuedSteps.clear();
-    }
-
-    private static boolean usesCraftingTable(RecipeDisplayEntry recipe, ContextMap context) {
-        return recipe.display().craftingStation().resolveForStacks(context).stream()
-                .anyMatch(stack -> stack.is(Items.CRAFTING_TABLE));
     }
 
     private static String itemName(Item item) {

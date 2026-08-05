@@ -9,7 +9,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import net.minecraft.util.context.ContextMap;
-import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.inventory.AbstractCraftingMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
@@ -87,7 +87,7 @@ public abstract class RecipeBookComponentMixin {
                 || CraftingExecutor.isExecuting()
                 || lazycraft$armedGhostRecipe == null
                 || lazycraft$armedGhostCollection == null
-                || !(minecraft.player != null && minecraft.player.containerMenu instanceof CraftingMenu menu)
+                || !(minecraft.player != null && minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
                 || slot != menu.getResultSlot()
                 || !slot.getItem().isEmpty()) {
             return;
