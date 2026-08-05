@@ -1,31 +1,31 @@
 # LazyCraft
 
-A Minecraft mod that helps you craft items by automatically handling the crafting steps needed to make them.
+A collection of quality-of-life crafting features to make crafting feel intuitive
 
-Ever wanted to craft something but realized you are missing some different ingredients that each need their own recipes?
+Double-clicking a red (not vanilla craftable) recipe in the recipe book will attempt to recursively craft it, placing it
+in your inventory. Single-clicking still places the recipe in the crafting grid, and if recursively craftable, you can
+simply take the output item as if it were vanilla craftable.
 
-LazyCraft solves this by planning the crafting chain and crafting the ingredients for you.
+It is recommended to have extra space in your inventory, as the mod crafts all the required items automatically, which
+places them in your inventory for the next recipe. Having a full inventory may cause ghost items to drop, but these do
+not affect your existing ingredients.
 
 ## Features
 
-- Automatically finds recipes needed to create an item
-- Recursively searches for missing ingredients
-- Detects recipes added by other mods
-- Helps choose the best crafting path
-- Configurable recursion depth
+- Recursive recipe handling
+- Direct recipe book crafting
+- Supports crafting table and inventory crafting
+- Supports modded item recipes
+- Server support (I wouldn't go too wild though, anticheats may not like such fast crafting)
+
+## Coming Soon
+
+- Dynamic crafting station support for mods
+- Recursive craft highlighting
 
 ## Status
 
 This project is currently in early development. Features and behavior may change.
-
-## Roadmap
-
-- [x] Recipe indexing
-- [x] Recursive recipe tree generation
-- [x] Recipe scoring system
-- [ ] Automatic crafting execution
-- [ ] Improved recipe book integration
-- [ ] User configuration options
 
 ## License
 

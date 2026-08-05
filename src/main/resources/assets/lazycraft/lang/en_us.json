@@ -1,7 +1,6 @@
 {
   "modmenu.nameTranslation.lazycraft": "LazyCraft",
-  "modmenu.summaryTranslation.lazycraft": "A crafting quality-of-life mod.",
-  "modmenu.descriptionTranslation.lazycraft": "Lazy ways to make crafting intuitive",
+  "modmenu.descriptionTranslation.lazycraft": "A collection of quality-of-life crafting features to make crafting feel intuitive.",
   "text.autoconfig.lazycraft.title": "LazyCraft",
   "text.autoconfig.lazycraft.category.recipe_book_crafting": "Recipe Book Crafting",
   "text.autoconfig.lazycraft.category.recursive_crafting": "Recursive Crafting",

@@ -6,7 +6,6 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.util.context.ContextMap;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
 import net.minecraft.world.item.crafting.display.SlotDisplay;
@@ -36,7 +35,7 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
         }
 
         ContextMap context = SlotDisplayContext.fromLevel(level);
-        return build(target, maxDepth, context, Set.of());
+        return build(target, maxDepth, context, CraftingGrid.current().orElse(CraftingGrid.CRAFTING_TABLE), Set.of());
     }
 
     public static void log(Item target) {
@@ -53,6 +52,7 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
             Item item,
             int remainingDepth,
             ContextMap context,
+            CraftingGrid craftingGrid,
             Set<Item> path
     ) {
         if (path.contains(item)) {
@@ -60,7 +60,7 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
         }
 
         List<RecipeDisplayEntry> stationRecipes = RecipeIndex.recipesProducing(item).stream()
-                .filter(recipe -> usesStation(recipe, Items.CRAFTING_TABLE, context))
+                .filter(recipe -> craftingGrid.supports(recipe, context))
                 .toList();
         if (stationRecipes.isEmpty()) {
             return new RecipeTree(item, List.of(), Stop.RAW_MATERIAL);
@@ -98,6 +98,7 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
                                 acceptedStack.getItem(),
                                 remainingDepth - 1,
                                 context,
+                                craftingGrid,
                                 nextPath
                         ));
                     }
@@ -117,12 +118,6 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
 
         Stop stop = recipes.isEmpty() ? Stop.NO_CRAFTING_REQUIREMENTS : Stop.NONE;
         return new RecipeTree(item, List.copyOf(recipes), stop);
-    }
-
-    @SuppressWarnings("SameParameterValue")
-    private static boolean usesStation(RecipeDisplayEntry recipe, Item station, ContextMap context) {
-        return recipe.display().craftingStation().resolveForStacks(context).stream()
-                .anyMatch(stack -> stack.is(station));
     }
 
     private static void log(RecipeTree node, int indentation, long requiredCount) {
