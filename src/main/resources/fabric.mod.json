@@ -3,7 +3,7 @@
 	"id": "lazycraft",
 	"version": "${version}",
 	"name": "LazyCraft",
-	"description": "A recursive crafting planner that automatically resolves and crafts item dependencies.",
+	"description": "A collection of quality-of-life crafting features to make crafting feel intuitive",
 	"authors": [
 		"GoldOliverK09"
 	],

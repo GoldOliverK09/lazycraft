@@ -1,32 +1,52 @@
 # LazyCraft
 
-A collection of quality-of-life crafting features to make crafting feel intuitive
+LazyCraft is a collection of crafting quality-of-life features designed to make Minecraft’s recipe book faster and more
+intuitive to use.
 
-Double-clicking a red (not vanilla craftable) recipe in the recipe book will attempt to recursively craft it, placing it
-in your inventory. Single-clicking still places the recipe in the crafting grid, and if recursively craftable, you can
-simply take the output item as if it were vanilla craftable.
+## Recursive Crafting
 
-It is recommended to have extra space in your inventory, as the mod crafts all the required items automatically, which
-places them in your inventory for the next recipe. Having a full inventory may cause ghost items to drop, but these do
-not affect your existing ingredients.
+Double-click a recipe that vanilla considers uncraftable, and LazyCraft will attempt to craft all of its required
+components in order before placing the final item in your inventory.
+
+A single click still behaves similarly to vanilla and places the selected recipe into the crafting grid. When a recipe
+is recursively craftable, its output can also be taken from the result slot as though all the required ingredients were
+already available.
+
+For example, crafting a dispenser can automatically craft the required sticks and bow first, provided you have all the
+necessary base ingredients.
+
+## Inventory Space
+
+Some free inventory space is recommended.
+
+LazyCraft temporarily places intermediate items into your inventory so they can be used by the following crafting steps.
+If your inventory is completely full, Minecraft may briefly display or drop ghost items during the process. These do not
+replace or consume any additional ingredients, but crafting is more reliable when a few slots are available.
 
 ## Features
 
-- Recursive recipe handling
-- Direct recipe book crafting
-- Supports crafting table and inventory crafting
-- Supports modded item recipes
-- Server support (I wouldn't go too wild though, anticheats may not like such fast crafting)
+- Recursive crafting through the recipe book
+- Direct crafting from recipe-book entries
+- Crafting-table and player-inventory crafting
+- Support for modded crafting recipes
+- Multiplayer server support
 
-## Coming Soon
+Because LazyCraft performs several normal crafting actions in quick succession, some servers with strict anti-cheat
+systems may interfere with recursive crafting.
 
-- Dynamic crafting station support for mods
-- Recursive craft highlighting
+## Planned Features
 
-## Status
+- Dynamic support for additional crafting stations
+- Recipe-book highlighting for recursively craftable recipes
+- Further crafting quality-of-life options
 
-This project is currently in early development. Features and behavior may change.
+## Development Status
+
+LazyCraft is currently in early development. Features, behavior, configuration options, and compatibility may change
+between releases.
+
+Bug reports and feedback are welcome.
 
 ## License
 
-This project is licensed under the MIT License.
+LazyCraft is licensed under the MIT License.

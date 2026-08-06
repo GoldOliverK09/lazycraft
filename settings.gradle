@@ -9,5 +9,5 @@ pluginManagement {
 	}
 }
 
-// Should match your modid
+// Should match your mod id
 rootProject.name = 'lazycraft'
