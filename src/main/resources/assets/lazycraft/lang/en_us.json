@@ -19,6 +19,8 @@
   "text.autoconfig.lazycraft.option.serverUpdateTimeoutTicks.@Tooltip": "How long LazyCraft waits for a server menu update before cancelling. Twenty ticks is normally one second.",
   "text.autoconfig.lazycraft.option.stepDelayTicks": "Delay between steps (ticks)",
   "text.autoconfig.lazycraft.option.stepDelayTicks.@Tooltip": "Delay between completed dependency steps. Increase this only if a laggy server updates inventories too slowly.",
+  "text.lazycraft.config.cloth_missing.title": "LazyCraft settings are unavailable",
+  "text.lazycraft.config.cloth_missing.message": "Install a compatible version of Cloth Config API to edit LazyCraft settings in-game. You can also edit config/lazycraft.json manually.",
   "text.lazycraft.scoring_mode.least_total_ingredients": "Least total ingredients",
   "text.lazycraft.scoring_mode.fewest_steps": "Fewest crafting steps",
   "text.lazycraft.scoring_mode.fewest_recipe_executions": "Fewest recipe executions"

@@ -1,10 +1,10 @@
 package klumpler.lazycraft.client.mixin;
 
 import klumpler.lazycraft.client.config.LazyCraftConfig;
+import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import klumpler.lazycraft.client.planner.CraftingExecutor;
 import klumpler.lazycraft.client.planner.CraftingStep;
 import klumpler.lazycraft.client.planner.RecipePlanner;
-import me.shedaniel.autoconfig.AutoConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.recipebook.GhostSlots;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
@@ -49,7 +49,7 @@ public abstract class RecipeBookComponentMixin {
             boolean useMaxItems,
             CallbackInfoReturnable<Boolean> cir
     ) {
-        LazyCraftConfig config = AutoConfig.getConfigHolder(LazyCraftConfig.class).getConfig();
+        LazyCraftConfig config = LazyCraftConfigManager.get();
         if (!config.recipeBookCrafting || CraftingExecutor.isExecuting()) {
             return;
         }
@@ -86,7 +86,7 @@ public abstract class RecipeBookComponentMixin {
     @Inject(method = "slotClicked", at = @At("HEAD"), cancellable = true)
     private void lazycraft$executeGhostOutput(Slot slot, CallbackInfo ci) {
         Minecraft minecraft = Minecraft.getInstance();
-        LazyCraftConfig config = AutoConfig.getConfigHolder(LazyCraftConfig.class).getConfig();
+        LazyCraftConfig config = LazyCraftConfigManager.get();
         if (!config.recipeBookCrafting
                 || !config.recursiveRecipeBookCrafting
                 || CraftingExecutor.isExecuting()

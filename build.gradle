@@ -41,8 +41,8 @@ dependencies {
 
     // Fabric API. This is technically optional, but you probably want it anyway.
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-    implementation "maven.modrinth:9s6osm5g:Nv3xnWXd" // Cloth Config API
-    compileOnly "maven.modrinth:mOgUt4GM:njXb639R" // Mod Menu
+    clientCompileOnly "maven.modrinth:9s6osm5g:Nv3xnWXd" // Optional Cloth Config API integration
+    clientCompileOnly "maven.modrinth:mOgUt4GM:njXb639R" // Optional Mod Menu integration
 }
 
 processResources {

@@ -2,15 +2,12 @@ package klumpler.lazycraft.client.planner;
 
 import klumpler.lazycraft.LazyCraft;
 import klumpler.lazycraft.client.config.LazyCraftConfig;
-import me.shedaniel.autoconfig.AutoConfig;
+import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.util.context.ContextMap;
 import net.minecraft.world.inventory.AbstractCraftingMenu;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
-import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 
 import java.util.*;
 
@@ -26,39 +23,6 @@ public final class CraftingExecutor {
     private static int executionStepDelayTicks;
 
     private CraftingExecutor() {
-    }
-
-    /**
-     * Starts one execution of the first recipe compatible with the current crafting grid.
-     * Planner code should prefer {@link #execute(CraftingStep)} so it retains its chosen recipe.
-     */
-    public static boolean execute(Item target) {
-        Objects.requireNonNull(target, "target cannot be null");
-
-        var level = Minecraft.getInstance().level;
-        if (level == null) {
-            return false;
-        }
-
-        Optional<CraftingGrid> craftingGrid = CraftingGrid.current();
-        if (craftingGrid.isEmpty()) {
-            return false;
-        }
-
-        CraftingGrid grid = craftingGrid.get();
-        ContextMap context = SlotDisplayContext.fromLevel(level);
-        Optional<RecipeDisplayEntry> recipe = RecipeIndex.recipesProducing(target).stream()
-                .filter(entry -> grid.supports(entry, context))
-                .findFirst();
-        return recipe.map(entry -> execute(new CraftingStep(entry, target, 1))).orElse(false);
-    }
-
-    /**
-     * Starts a server-synchronized execution of the supplied planner step.
-     */
-    public static boolean execute(CraftingStep step) {
-        Objects.requireNonNull(step, "step cannot be null");
-        return executeQueuedCrafts(List.of(new QueuedCraft(step, false, false)), null);
     }
 
     /**
@@ -130,7 +94,7 @@ public final class CraftingExecutor {
             return false;
         }
 
-        LazyCraftConfig config = AutoConfig.getConfigHolder(LazyCraftConfig.class).getConfig();
+        LazyCraftConfig config = LazyCraftConfigManager.get();
         executionUpdateTimeoutTicks = config.serverUpdateTimeoutTicks;
         executionStepDelayTicks = config.stepDelayTicks;
         queuedCrafts.addAll(craftsToQueue);

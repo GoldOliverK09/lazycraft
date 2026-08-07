@@ -1,10 +1,8 @@
 package klumpler.lazycraft.client.planner;
 
-import klumpler.lazycraft.LazyCraft;
 import klumpler.lazycraft.client.config.LazyCraftConfig;
-import me.shedaniel.autoconfig.AutoConfig;
+import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import net.minecraft.client.Minecraft;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
 
 import java.util.*;
@@ -85,32 +83,8 @@ public final class RecipePlanner {
         ));
     }
 
-    public static void logPlan(CraftPlan plan, long startNanos) {
-        LazyCraft.LOGGER.info(
-                "Craft plan for {} x{} ({} total ingredients) (took {} ms):",
-                itemName(plan.target()),
-                plan.quantity(),
-                plan.totalIngredients(),
-                (System.nanoTime() - startNanos) / 1_000_000.0
-        );
-
-        for (int index = 0; index < plan.steps().size(); index++) {
-            CraftingStep step = plan.steps().get(index);
-            LazyCraft.LOGGER.info(
-                    "  {}. Craft {} ({} recipe executions)",
-                    index + 1,
-                    itemName(step.output()),
-                    step.crafts()
-            );
-        }
-    }
-
-    private static String itemName(Item item) {
-        return BuiltInRegistries.ITEM.getKey(item).toString();
-    }
-
     private static LazyCraftConfig config() {
-        return AutoConfig.getConfigHolder(LazyCraftConfig.class).getConfig();
+        return LazyCraftConfigManager.get();
     }
 
     public static final class PlanningSession {

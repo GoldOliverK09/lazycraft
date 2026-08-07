@@ -2,11 +2,11 @@ package klumpler.lazycraft.client.recipebook;
 
 import klumpler.lazycraft.LazyCraft;
 import klumpler.lazycraft.client.config.LazyCraftConfig;
+import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import klumpler.lazycraft.client.planner.CraftingGrid;
 import klumpler.lazycraft.client.planner.InventorySnapshot;
 import klumpler.lazycraft.client.planner.RecipeIndex;
 import klumpler.lazycraft.client.planner.RecipePlanner;
-import me.shedaniel.autoconfig.AutoConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import net.minecraft.util.context.ContextMap;
@@ -282,7 +282,7 @@ public final class VisibleRecipeCraftability {
                 return null;
             }
 
-            LazyCraftConfig config = AutoConfig.getConfigHolder(LazyCraftConfig.class).getConfig();
+            LazyCraftConfig config = LazyCraftConfigManager.get();
             if (!config.recipeBookCrafting || !config.recursiveRecipeBookCrafting) {
                 return null;
             }

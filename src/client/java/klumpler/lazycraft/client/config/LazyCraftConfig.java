@@ -1,14 +1,9 @@
 package klumpler.lazycraft.client.config;
 
-import klumpler.lazycraft.LazyCraft;
 import klumpler.lazycraft.client.planner.PlanScorer;
 import klumpler.lazycraft.client.planner.PlanScorers;
-import me.shedaniel.autoconfig.ConfigData;
-import me.shedaniel.autoconfig.annotation.Config;
-import me.shedaniel.autoconfig.annotation.ConfigEntry;
 
-@Config(name = LazyCraft.MOD_ID)
-public class LazyCraftConfig implements ConfigData {
+public class LazyCraftConfig {
     static final int MIN_RECURSION_DEPTH = 1;
     static final int MAX_RECURSION_DEPTH = 32;
     static final int DEFAULT_RECURSION_DEPTH = 6;
@@ -32,13 +27,11 @@ public class LazyCraftConfig implements ConfigData {
      */
     public boolean recursiveRecipeBookCrafting = true;
 
-    @ConfigEntry.BoundedDiscrete(min = MIN_RECURSION_DEPTH, max = MAX_RECURSION_DEPTH)
     public int recursionDepth = DEFAULT_RECURSION_DEPTH;
 
     /**
      * Limits the number of candidate plans retained at each recursive search layer.
      */
-    @ConfigEntry.BoundedDiscrete(min = MIN_CANDIDATES_PER_LAYER, max = MAX_CANDIDATES_PER_LAYER)
     public int maxCandidatesPerLayer = DEFAULT_CANDIDATES_PER_LAYER;
 
     public ScoringMode scoringMode = ScoringMode.LEAST_TOTAL_INGREDIENTS;
@@ -46,20 +39,14 @@ public class LazyCraftConfig implements ConfigData {
     /**
      * Number of ticks to wait for a server menu update before cancelling execution.
      */
-    @ConfigEntry.BoundedDiscrete(
-            min = MIN_SERVER_UPDATE_TIMEOUT_TICKS,
-            max = MAX_SERVER_UPDATE_TIMEOUT_TICKS
-    )
     public int serverUpdateTimeoutTicks = DEFAULT_SERVER_UPDATE_TIMEOUT_TICKS;
 
     /**
      * Number of ticks to wait between completed steps in a multi-step plan.
      */
-    @ConfigEntry.BoundedDiscrete(min = MIN_STEP_DELAY_TICKS, max = MAX_STEP_DELAY_TICKS)
     public int stepDelayTicks = DEFAULT_STEP_DELAY_TICKS;
 
-    @Override
-    public void validatePostLoad() {
+    public void validate() {
         recursionDepth = Math.clamp(recursionDepth, MIN_RECURSION_DEPTH, MAX_RECURSION_DEPTH);
         maxCandidatesPerLayer = Math.clamp(
                 maxCandidatesPerLayer,

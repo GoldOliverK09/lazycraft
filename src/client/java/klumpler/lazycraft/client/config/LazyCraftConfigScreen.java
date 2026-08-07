@@ -1,7 +1,5 @@
 package klumpler.lazycraft.client.config;
 
-import me.shedaniel.autoconfig.AutoConfig;
-import me.shedaniel.autoconfig.ConfigHolder;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import net.minecraft.client.gui.screens.Screen;
@@ -16,13 +14,12 @@ public final class LazyCraftConfigScreen {
     }
 
     public static Screen create(Screen parent) {
-        ConfigHolder<LazyCraftConfig> holder = AutoConfig.getConfigHolder(LazyCraftConfig.class);
-        LazyCraftConfig config = holder.getConfig();
+        LazyCraftConfig config = LazyCraftConfigManager.get();
 
         ConfigBuilder builder = ConfigBuilder.create()
                 .setParentScreen(parent)
                 .setTitle(Component.translatable("text.autoconfig.lazycraft.title"))
-                .setSavingRunnable(holder::save);
+                .setSavingRunnable(LazyCraftConfigManager::save);
         ConfigCategory recipeBookCategory = builder.getOrCreateCategory(
                 Component.translatable("text.autoconfig.lazycraft.category.recipe_book_crafting"));
         ConfigCategory recursiveCraftingCategory = builder.getOrCreateCategory(
@@ -60,12 +57,12 @@ public final class LazyCraftConfigScreen {
                 .build());
 
         recursiveCraftingCategory.addEntry(builder.entryBuilder()
-                .startIntField(
+                .startIntSlider(
                         optionLabel("maxCandidatesPerLayer"),
-                        config.maxCandidatesPerLayer)
+                        config.maxCandidatesPerLayer,
+                        LazyCraftConfig.MIN_CANDIDATES_PER_LAYER,
+                        LazyCraftConfig.MAX_CANDIDATES_PER_LAYER)
                 .setDefaultValue(LazyCraftConfig.DEFAULT_CANDIDATES_PER_LAYER)
-                .setMin(LazyCraftConfig.MIN_CANDIDATES_PER_LAYER)
-                .setMax(LazyCraftConfig.MAX_CANDIDATES_PER_LAYER)
                 .setTooltip(optionTooltip("maxCandidatesPerLayer"))
                 .setSaveConsumer(value -> config.maxCandidatesPerLayer = value)
                 .build());
@@ -83,12 +80,12 @@ public final class LazyCraftConfigScreen {
                 .build());
 
         executionCategory.addEntry(builder.entryBuilder()
-                .startIntField(
+                .startIntSlider(
                         optionLabel("serverUpdateTimeoutTicks"),
-                        config.serverUpdateTimeoutTicks)
+                        config.serverUpdateTimeoutTicks,
+                        LazyCraftConfig.MIN_SERVER_UPDATE_TIMEOUT_TICKS,
+                        LazyCraftConfig.MAX_SERVER_UPDATE_TIMEOUT_TICKS)
                 .setDefaultValue(LazyCraftConfig.DEFAULT_SERVER_UPDATE_TIMEOUT_TICKS)
-                .setMin(LazyCraftConfig.MIN_SERVER_UPDATE_TIMEOUT_TICKS)
-                .setMax(LazyCraftConfig.MAX_SERVER_UPDATE_TIMEOUT_TICKS)
                 .setTooltip(optionTooltip("serverUpdateTimeoutTicks"))
                 .setSaveConsumer(value -> config.serverUpdateTimeoutTicks = value)
                 .build());
