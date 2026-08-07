@@ -1,5 +1,6 @@
 package klumpler.lazycraft.client.planner;
 
+import klumpler.lazycraft.LazyCraft;
 import klumpler.lazycraft.client.config.LazyCraftConfig;
 import me.shedaniel.autoconfig.AutoConfig;
 import net.minecraft.client.Minecraft;
@@ -10,13 +11,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
 import net.minecraft.world.item.crafting.display.SlotDisplayContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
 public final class RecipePlanner {
-    private static final Logger LOGGER = LoggerFactory.getLogger("lazycraft");
     private static final int MAX_CANDIDATES_PER_LAYER = 64;
 
     private RecipePlanner() {
@@ -30,7 +28,6 @@ public final class RecipePlanner {
         return plan(target, 1, config().scoringMode.scorer());
     }
 
-    @SuppressWarnings("unused")
     public static Optional<CraftPlan> plan(Item target, int quantity) {
         return plan(target, quantity, config().scoringMode.scorer());
     }
@@ -72,18 +69,18 @@ public final class RecipePlanner {
                 .map(search::toPlan);
     }
 
-    public static void logPlan(CraftPlan plan, long time) {
-        LOGGER.info(
+    public static void logPlan(CraftPlan plan, long startNanos) {
+        LazyCraft.LOGGER.info(
                 "Craft plan for {} x{} ({} total ingredients) (took {} ms):",
                 itemName(plan.target()),
                 plan.quantity(),
                 plan.totalIngredients(),
-                (System.nanoTime() - time) / 1_000_000.0
+                (System.nanoTime() - startNanos) / 1_000_000.0
         );
 
         for (int index = 0; index < plan.steps().size(); index++) {
             CraftingStep step = plan.steps().get(index);
-            LOGGER.info(
+            LazyCraft.LOGGER.info(
                     "  {}. Craft {} ({} recipe executions)",
                     index + 1,
                     itemName(step.output()),
@@ -117,7 +114,8 @@ public final class RecipePlanner {
                 int depth,
                 boolean mayUseExistingOutput
         ) {
-            if (mayUseExistingOutput && inventory.has(item, quantity)) {
+            int existingOutputCount = mayUseExistingOutput ? inventory.getAmount(item) : 0;
+            if (mayUseExistingOutput && existingOutputCount >= quantity) {
                 return List.of(SearchResult.empty(inventory));
             }
 
@@ -125,7 +123,7 @@ public final class RecipePlanner {
                 return List.of();
             }
 
-            int missing = mayUseExistingOutput ? quantity - inventory.getAmount(item) : quantity;
+            int missing = quantity - existingOutputCount;
             Set<Item> nextPath = new HashSet<>(path);
             nextPath.add(item);
             List<SearchResult> candidates = new ArrayList<>();
@@ -135,10 +133,11 @@ public final class RecipePlanner {
                     continue;
                 }
 
-                Optional<List<Ingredient>> requirements = recipe.craftingRequirements();
-                if (requirements.isEmpty()) {
+                Optional<List<Ingredient>> optionalRequirements = recipe.craftingRequirements();
+                if (optionalRequirements.isEmpty()) {
                     continue;
                 }
+                List<Ingredient> requirements = optionalRequirements.get();
 
                 int outputCount = outputCount(recipe, item);
                 if (outputCount == 0) {
@@ -147,7 +146,7 @@ public final class RecipePlanner {
 
                 int crafts = divideRoundUp(missing, outputCount);
                 for (SearchResult satisfied : satisfyRequirements(
-                        requirements.get(),
+                        requirements,
                         crafts,
                         SearchResult.empty(inventory.copy()),
                         nextPath,
@@ -157,7 +156,7 @@ public final class RecipePlanner {
                     addOutputs(craftedInventory, recipe, crafts);
                     candidates.add(satisfied.addStep(
                             new CraftingStep(recipe, item, crafts),
-                            ingredientCost(requirements.get(), crafts),
+                            ingredientCost(requirements, crafts),
                             craftedInventory
                     ));
                 }
@@ -320,7 +319,8 @@ public final class RecipePlanner {
         }
 
         private SearchResult combine(SearchResult next, InventorySnapshot inventory) {
-            List<CraftingStep> combinedSteps = new ArrayList<>(steps);
+            List<CraftingStep> combinedSteps = new ArrayList<>(steps.size() + next.steps.size());
+            combinedSteps.addAll(steps);
             combinedSteps.addAll(next.steps);
             return new SearchResult(
                     inventory,
@@ -334,7 +334,8 @@ public final class RecipePlanner {
                 long ingredientCost,
                 InventorySnapshot inventory
         ) {
-            List<CraftingStep> nextSteps = new ArrayList<>(steps);
+            List<CraftingStep> nextSteps = new ArrayList<>(steps.size() + 1);
+            nextSteps.addAll(steps);
             nextSteps.add(step);
             return new SearchResult(
                     inventory,

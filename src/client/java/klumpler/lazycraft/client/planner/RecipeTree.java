@@ -1,5 +1,6 @@
 package klumpler.lazycraft.client.planner;
 
+import klumpler.lazycraft.LazyCraft;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.tags.TagKey;
@@ -10,16 +11,12 @@ import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
 import net.minecraft.world.item.crafting.display.SlotDisplay;
 import net.minecraft.world.item.crafting.display.SlotDisplayContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
 public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
-    private static final Logger LOGGER = LoggerFactory.getLogger("lazycraft");
     private static final int DEFAULT_MAX_DEPTH = 5;
 
-    @SuppressWarnings("unused")
     public static RecipeTree build(Item target) {
         return build(target, DEFAULT_MAX_DEPTH);
     }
@@ -35,13 +32,19 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
         }
 
         ContextMap context = SlotDisplayContext.fromLevel(level);
-        return build(target, maxDepth, context, CraftingGrid.current().orElse(CraftingGrid.CRAFTING_TABLE), Set.of());
+        return build(
+                target,
+                maxDepth,
+                context,
+                CraftingGrid.current().orElse(CraftingGrid.CRAFTING_TABLE),
+                Set.of()
+        );
     }
 
     public static void log(Item target) {
-        long start = System.nanoTime();
+        long startNanos = System.nanoTime();
         log(target, DEFAULT_MAX_DEPTH);
-        LOGGER.info("Tree build took {} ms", (System.nanoTime() - start) / 1_000_000.0);
+        LazyCraft.LOGGER.info("Tree build took {} ms", (System.nanoTime() - startNanos) / 1_000_000.0);
     }
 
     public static void log(Item target, int maxDepth) {
@@ -59,10 +62,10 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
             return new RecipeTree(item, List.of(), Stop.CYCLE);
         }
 
-        List<RecipeDisplayEntry> stationRecipes = RecipeIndex.recipesProducing(item).stream()
+        List<RecipeDisplayEntry> supportedRecipes = RecipeIndex.recipesProducing(item).stream()
                 .filter(recipe -> craftingGrid.supports(recipe, context))
                 .toList();
-        if (stationRecipes.isEmpty()) {
+        if (supportedRecipes.isEmpty()) {
             return new RecipeTree(item, List.of(), Stop.RAW_MATERIAL);
         }
 
@@ -72,18 +75,19 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
 
         Set<Item> nextPath = new HashSet<>(path);
         nextPath.add(item);
-        List<RecipeOption> recipes = new ArrayList<>();
+        List<RecipeOption> recipeOptions = new ArrayList<>();
 
-        for (RecipeDisplayEntry recipe : stationRecipes) {
-            Optional<List<Ingredient>> requirements = recipe.craftingRequirements();
-            if (requirements.isEmpty()) {
+        for (RecipeDisplayEntry recipe : supportedRecipes) {
+            Optional<List<Ingredient>> optionalRequirements = recipe.craftingRequirements();
+            if (optionalRequirements.isEmpty()) {
                 continue;
             }
+            List<Ingredient> requirements = optionalRequirements.get();
 
-            List<IngredientOption> ingredients = new ArrayList<>();
-            for (Ingredient ingredient : requirements.get()) {
+            List<IngredientOption> ingredientOptions = new ArrayList<>();
+            for (Ingredient ingredient : requirements) {
                 if (ingredient.display() instanceof SlotDisplay.TagSlotDisplay(TagKey<Item> tag)) {
-                    ingredients.add(new IngredientOption(
+                    ingredientOptions.add(new IngredientOption(
                             ingredient,
                             Optional.of(tag),
                             List.of()
@@ -104,7 +108,7 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
                     }
                 }
 
-                ingredients.add(new IngredientOption(ingredient, Optional.empty(), List.copyOf(choices)));
+                ingredientOptions.add(new IngredientOption(ingredient, Optional.empty(), List.copyOf(choices)));
             }
 
             int outputCount = recipe.resultItems(context).stream()
@@ -112,12 +116,12 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
                     .mapToInt(ItemStack::getCount)
                     .sum();
             if (outputCount > 0) {
-                recipes.add(new RecipeOption(recipe, outputCount, List.copyOf(ingredients)));
+                recipeOptions.add(new RecipeOption(recipe, outputCount, List.copyOf(ingredientOptions)));
             }
         }
 
-        Stop stop = recipes.isEmpty() ? Stop.NO_CRAFTING_REQUIREMENTS : Stop.NONE;
-        return new RecipeTree(item, List.copyOf(recipes), stop);
+        Stop stop = recipeOptions.isEmpty() ? Stop.NO_CRAFTING_REQUIREMENTS : Stop.NONE;
+        return new RecipeTree(item, List.copyOf(recipeOptions), stop);
     }
 
     private static void log(RecipeTree node, int indentation, long requiredCount) {
@@ -155,12 +159,11 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
     }
 
     private static void logNode(RecipeTree node, int indentation, long quantity) {
-        String count = quantity > 1 ? " x" + quantity : "";
-        LOGGER.info(
+        LazyCraft.LOGGER.info(
                 "{}{}{}{}",
                 "  ".repeat(indentation),
                 itemName(node.item()),
-                count,
+                quantitySuffix(quantity),
                 stopSuffix(node.stop())
         );
     }
@@ -170,8 +173,11 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
     }
 
     private static void logTag(TagKey<Item> tag, int indentation, long quantity) {
-        String count = quantity > 1 ? " x" + quantity : "";
-        LOGGER.info("{}#{}{}", "  ".repeat(indentation), tag.location(), count);
+        LazyCraft.LOGGER.info("{}#{}{}", "  ".repeat(indentation), tag.location(), quantitySuffix(quantity));
+    }
+
+    private static String quantitySuffix(long quantity) {
+        return quantity > 1 ? " x" + quantity : "";
     }
 
     private static String stopSuffix(Stop stop) {
@@ -188,7 +194,11 @@ public record RecipeTree(Item item, List<RecipeOption> recipes, Stop stop) {
         return BuiltInRegistries.ITEM.getKey(item).getPath();
     }
 
-    public record RecipeOption(RecipeDisplayEntry entry, int outputCount, List<IngredientOption> ingredients) {
+    public record RecipeOption(
+            RecipeDisplayEntry entry,
+            int outputCount,
+            List<IngredientOption> ingredients
+    ) {
     }
 
     public record IngredientOption(

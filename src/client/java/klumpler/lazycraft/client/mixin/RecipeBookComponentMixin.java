@@ -50,20 +50,14 @@ public abstract class RecipeBookComponentMixin {
             CallbackInfoReturnable<Boolean> cir
     ) {
         LazyCraftConfig config = AutoConfig.getConfigHolder(LazyCraftConfig.class).getConfig();
-        if (!config.recipeBookCrafting) {
-            return;
-        }
-
-        if (CraftingExecutor.isExecuting()) {
+        if (!config.recipeBookCrafting || CraftingExecutor.isExecuting()) {
             return;
         }
 
         if (recipeCollection.isCraftable(recipe)) {
             // The first click is handled by vanilla and places the recipe.
             // Further clicks on it use LazyCraft's direct crafting shortcut.
-            if (!recipe.equals(lazycraft$armedGhostRecipe)) {
-                lazycraft$armedGhostRecipe = recipe;
-                lazycraft$armedGhostCollection = recipeCollection;
+            if (lazycraft$armRecipeIfNeeded(recipeCollection, recipe)) {
                 return;
             }
 
@@ -79,9 +73,7 @@ public abstract class RecipeBookComponentMixin {
 
         // The first click is handled by vanilla and displays the ghost recipe.
         // Further clicks on it confirm LazyCraft's recursive crafting action.
-        if (!recipe.equals(lazycraft$armedGhostRecipe)) {
-            lazycraft$armedGhostRecipe = recipe;
-            lazycraft$armedGhostCollection = recipeCollection;
+        if (lazycraft$armRecipeIfNeeded(recipeCollection, recipe)) {
             return;
         }
 
@@ -100,7 +92,8 @@ public abstract class RecipeBookComponentMixin {
                 || CraftingExecutor.isExecuting()
                 || lazycraft$armedGhostRecipe == null
                 || lazycraft$armedGhostCollection == null
-                || !(minecraft.player != null && minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
+                || minecraft.player == null
+                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
                 || slot != menu.getResultSlot()
                 || !slot.getItem().isEmpty()) {
             return;
@@ -123,10 +116,7 @@ public abstract class RecipeBookComponentMixin {
             return false;
         }
 
-        RecipeDisplayEntry entry = recipeCollection.getRecipes().stream()
-                .filter(recipeEntry -> recipeEntry.id().equals(recipe))
-                .findFirst()
-                .orElse(null);
+        RecipeDisplayEntry entry = lazycraft$findRecipeEntry(recipeCollection, recipe);
         if (entry == null) {
             return false;
         }
@@ -138,10 +128,10 @@ public abstract class RecipeBookComponentMixin {
                 .map(ItemStack::getItem)
                 .flatMap(RecipePlanner::plan)
                 .filter(plan -> !plan.steps().isEmpty())
-                .filter(plan -> takeResultToCursor
+                .map(plan -> takeResultToCursor
                         ? CraftingExecutor.executeToCursor(plan, () -> lazycraft$restoreGhostRecipe(entry.display()))
                         : CraftingExecutor.execute(plan, () -> lazycraft$restoreGhostRecipe(entry.display())))
-                .isPresent();
+                .orElse(false);
     }
 
     @Unique
@@ -156,14 +146,41 @@ public abstract class RecipeBookComponentMixin {
         }
 
         ContextMap context = SlotDisplayContext.fromLevel(minecraft.level);
-        return recipeCollection.getRecipes().stream()
-                .filter(recipeEntry -> recipeEntry.id().equals(recipe))
+        RecipeDisplayEntry entry = lazycraft$findRecipeEntry(recipeCollection, recipe);
+        if (entry == null) {
+            return false;
+        }
+
+        return entry.resultItems(context).stream()
+                .filter(stack -> !stack.isEmpty())
                 .findFirst()
-                .flatMap(recipeEntry -> recipeEntry.resultItems(context).stream()
-                        .filter(stack -> !stack.isEmpty())
-                        .findFirst()
-                        .map(stack -> new CraftingStep(recipeEntry, stack.getItem(), 1)))
+                .map(stack -> new CraftingStep(entry, stack.getItem(), 1))
                 .map(step -> CraftingExecutor.execute(step, useMaxItems))
                 .orElse(false);
+    }
+
+    @Unique
+    private boolean lazycraft$armRecipeIfNeeded(
+            RecipeCollection recipeCollection,
+            RecipeDisplayId recipe
+    ) {
+        if (recipe.equals(lazycraft$armedGhostRecipe)) {
+            return false;
+        }
+
+        lazycraft$armedGhostRecipe = recipe;
+        lazycraft$armedGhostCollection = recipeCollection;
+        return true;
+    }
+
+    @Unique
+    private RecipeDisplayEntry lazycraft$findRecipeEntry(
+            RecipeCollection recipeCollection,
+            RecipeDisplayId recipe
+    ) {
+        return recipeCollection.getRecipes().stream()
+                .filter(entry -> entry.id().equals(recipe))
+                .findFirst()
+                .orElse(null);
     }
 }

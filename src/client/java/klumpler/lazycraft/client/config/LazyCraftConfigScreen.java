@@ -21,12 +21,12 @@ public final class LazyCraftConfigScreen {
                 .setParentScreen(parent)
                 .setTitle(Component.translatable("text.autoconfig.lazycraft.title"))
                 .setSavingRunnable(holder::save);
-        ConfigCategory recipeBookCrafting = builder.getOrCreateCategory(
+        ConfigCategory recipeBookCategory = builder.getOrCreateCategory(
                 Component.translatable("text.autoconfig.lazycraft.category.recipe_book_crafting"));
-        ConfigCategory recursiveCrafting = builder.getOrCreateCategory(
+        ConfigCategory recursiveCraftingCategory = builder.getOrCreateCategory(
                 Component.translatable("text.autoconfig.lazycraft.category.recursive_crafting"));
 
-        recipeBookCrafting.addEntry(builder.entryBuilder()
+        recipeBookCategory.addEntry(builder.entryBuilder()
                 .startBooleanToggle(
                         Component.translatable("text.autoconfig.lazycraft.option.recipeBookCrafting"),
                         config.recipeBookCrafting)
@@ -34,7 +34,7 @@ public final class LazyCraftConfigScreen {
                 .setSaveConsumer(value -> config.recipeBookCrafting = value)
                 .build());
 
-        recipeBookCrafting.addEntry(builder.entryBuilder()
+        recipeBookCategory.addEntry(builder.entryBuilder()
                 .startBooleanToggle(
                         Component.translatable("text.autoconfig.lazycraft.option.recursiveRecipeBookCrafting"),
                         config.recursiveRecipeBookCrafting)
@@ -42,17 +42,17 @@ public final class LazyCraftConfigScreen {
                 .setSaveConsumer(value -> config.recursiveRecipeBookCrafting = value)
                 .build());
 
-        recursiveCrafting.addEntry(builder.entryBuilder()
+        recursiveCraftingCategory.addEntry(builder.entryBuilder()
                 .startIntSlider(
                         Component.translatable("text.autoconfig.lazycraft.option.recursionDepth"),
                         config.recursionDepth,
-                        1,
-                        32)
-                .setDefaultValue(6)
+                        LazyCraftConfig.MIN_RECURSION_DEPTH,
+                        LazyCraftConfig.MAX_RECURSION_DEPTH)
+                .setDefaultValue(LazyCraftConfig.DEFAULT_RECURSION_DEPTH)
                 .setSaveConsumer(value -> config.recursionDepth = value)
                 .build());
 
-        recursiveCrafting.addEntry(builder.entryBuilder()
+        recursiveCraftingCategory.addEntry(builder.entryBuilder()
                 .startEnumSelector(
                         Component.translatable("text.autoconfig.lazycraft.option.scoringMode"),
                         LazyCraftConfig.ScoringMode.class,

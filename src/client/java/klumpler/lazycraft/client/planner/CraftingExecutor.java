@@ -1,5 +1,6 @@
 package klumpler.lazycraft.client.planner;
 
+import klumpler.lazycraft.LazyCraft;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.util.context.ContextMap;
@@ -8,8 +9,6 @@ import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
 import net.minecraft.world.item.crafting.display.SlotDisplayContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
@@ -18,10 +17,9 @@ import java.util.*;
  * The server remains authoritative for every placement and result-slot click.
  */
 public final class CraftingExecutor {
-    private static final Logger LOGGER = LoggerFactory.getLogger("lazycraft");
     private static final int UPDATE_TIMEOUT_TICKS = 40;
     private static final int STEP_SETTLE_TICKS = 1;
-    private static final Deque<QueuedCraft> queuedSteps = new ArrayDeque<>();
+    private static final Deque<QueuedCraft> queuedCrafts = new ArrayDeque<>();
     private static ActiveCraft activeCraft;
     private static Runnable completionCallback;
 
@@ -45,9 +43,10 @@ public final class CraftingExecutor {
             return false;
         }
 
+        CraftingGrid grid = craftingGrid.get();
         ContextMap context = SlotDisplayContext.fromLevel(level);
         Optional<RecipeDisplayEntry> recipe = RecipeIndex.recipesProducing(target).stream()
-                .filter(entry -> craftingGrid.get().supports(entry, context))
+                .filter(entry -> grid.supports(entry, context))
                 .findFirst();
         return recipe.map(entry -> execute(new CraftingStep(entry, target, 1))).orElse(false);
     }
@@ -57,7 +56,7 @@ public final class CraftingExecutor {
      */
     public static boolean execute(CraftingStep step) {
         Objects.requireNonNull(step, "step cannot be null");
-        return executeSteps(List.of(step));
+        return executeQueuedCrafts(List.of(new QueuedCraft(step, false, false)), null);
     }
 
     /**
@@ -66,7 +65,7 @@ public final class CraftingExecutor {
      */
     public static boolean execute(CraftingStep step, boolean useMaxItems) {
         Objects.requireNonNull(step, "step cannot be null");
-        return executeQueuedSteps(List.of(new QueuedCraft(step, false, useMaxItems)));
+        return executeQueuedCrafts(List.of(new QueuedCraft(step, false, useMaxItems)), null);
     }
 
     /**
@@ -80,8 +79,7 @@ public final class CraftingExecutor {
      * Executes a plan and runs {@code onComplete} after its final craft succeeds.
      */
     public static boolean execute(CraftPlan plan, Runnable onComplete) {
-        Objects.requireNonNull(plan, "plan cannot be null");
-        return executeSteps(plan.steps(), onComplete);
+        return executePlan(plan, onComplete, false);
     }
 
     /**
@@ -96,49 +94,43 @@ public final class CraftingExecutor {
      * Executes a plan, leaves its final result on the cursor, then runs {@code onComplete}.
      */
     public static boolean executeToCursor(CraftPlan plan, Runnable onComplete) {
+        return executePlan(plan, onComplete, true);
+    }
+
+    private static boolean executePlan(CraftPlan plan, Runnable onComplete, boolean takeFinalResultToCursor) {
         Objects.requireNonNull(plan, "plan cannot be null");
-        if (plan.steps().isEmpty()) {
+        List<CraftingStep> steps = plan.steps();
+        if (steps.isEmpty()) {
             return false;
         }
 
-        List<QueuedCraft> queuedCrafts = new ArrayList<>(plan.steps().size());
-        for (int index = 0; index < plan.steps().size(); index++) {
-            queuedCrafts.add(new QueuedCraft(
-                    plan.steps().get(index),
-                    index == plan.steps().size() - 1,
+        int lastStepIndex = steps.size() - 1;
+        List<QueuedCraft> craftsToQueue = new ArrayList<>(steps.size());
+        for (int index = 0; index < steps.size(); index++) {
+            craftsToQueue.add(new QueuedCraft(
+                    steps.get(index),
+                    takeFinalResultToCursor && index == lastStepIndex,
                     false
             ));
         }
-        return executeQueuedSteps(queuedCrafts, onComplete);
+        return executeQueuedCrafts(craftsToQueue, onComplete);
     }
 
-    private static boolean executeSteps(List<CraftingStep> steps) {
-        return executeSteps(steps, null);
-    }
-
-    private static boolean executeSteps(List<CraftingStep> steps, Runnable onComplete) {
-        return executeQueuedSteps(steps.stream()
-                .map(step -> new QueuedCraft(step, false, false))
-                .toList(), onComplete);
-    }
-
-    private static boolean executeQueuedSteps(List<QueuedCraft> steps) {
-        return executeQueuedSteps(steps, null);
-    }
-
-    private static boolean executeQueuedSteps(List<QueuedCraft> steps, Runnable onComplete) {
-        if (activeCraft != null || !queuedSteps.isEmpty() || steps.isEmpty()) {
+    private static boolean executeQueuedCrafts(List<QueuedCraft> craftsToQueue, Runnable onComplete) {
+        if (activeCraft != null || !queuedCrafts.isEmpty() || craftsToQueue.isEmpty()) {
             return false;
         }
 
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null || minecraft.gameMode == null || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
+        if (minecraft.player == null
+                || minecraft.gameMode == null
+                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
             return false;
         }
 
-        queuedSteps.addAll(steps);
+        queuedCrafts.addAll(craftsToQueue);
         completionCallback = onComplete;
-        startNextStep(minecraft, menu);
+        startNextCraft(minecraft, menu);
         return true;
     }
 
@@ -150,42 +142,44 @@ public final class CraftingExecutor {
             return;
         }
 
-        if (minecraft.player == null || minecraft.gameMode == null || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
-                || menu.containerId != activeCraft.containerId()) {
+        if (minecraft.player == null
+                || minecraft.gameMode == null
+                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
+                || menu.containerId != activeCraft.containerId) {
             stop("the crafting grid was closed");
             return;
         }
 
-        activeCraft.ticksWaiting(activeCraft.ticksWaiting() + 1);
+        activeCraft.ticksWaiting++;
 
-        if (activeCraft.phase() == Phase.WAITING_TO_START_NEXT_STEP) {
-            if (activeCraft.ticksWaiting() < STEP_SETTLE_TICKS) {
+        if (activeCraft.phase == Phase.WAITING_TO_START_NEXT_STEP) {
+            if (activeCraft.ticksWaiting < STEP_SETTLE_TICKS) {
                 return;
             }
 
             activeCraft = null;
-            startNextStep(minecraft, menu);
+            startNextCraft(minecraft, menu);
             return;
         }
 
-        if (activeCraft.ticksWaiting() > UPDATE_TIMEOUT_TICKS) {
+        if (activeCraft.ticksWaiting > UPDATE_TIMEOUT_TICKS) {
             stop("the server did not update the crafting table in time");
             return;
         }
 
-        if (menu.getStateId() == activeCraft.expectedStateId()) {
+        if (menu.getStateId() == activeCraft.expectedStateId) {
             return;
         }
 
-        switch (activeCraft.phase()) {
+        switch (activeCraft.phase) {
             case WAITING_FOR_PLACEMENT -> takeResult(minecraft, activeCraft, menu);
             case WAITING_FOR_CRAFT -> {
-                activeCraft.remainingCrafts(activeCraft.remainingCrafts() - 1);
-                if (activeCraft.remainingCrafts() == 0) {
-                    LOGGER.info("Finished crafting {}", itemName(activeCraft.step().output()));
-                    if (!queuedSteps.isEmpty()) {
-                        activeCraft.phase(Phase.WAITING_TO_START_NEXT_STEP);
-                        activeCraft.ticksWaiting(0);
+                activeCraft.remainingCrafts--;
+                if (activeCraft.remainingCrafts == 0) {
+                    LazyCraft.LOGGER.info("Finished crafting {}", itemName(activeCraft.step.output()));
+                    if (!queuedCrafts.isEmpty()) {
+                        activeCraft.phase = Phase.WAITING_TO_START_NEXT_STEP;
+                        activeCraft.ticksWaiting = 0;
                     } else {
                         activeCraft = null;
                         runCompletionCallback();
@@ -198,55 +192,57 @@ public final class CraftingExecutor {
     }
 
     public static boolean isExecuting() {
-        return activeCraft != null || !queuedSteps.isEmpty();
+        return activeCraft != null || !queuedCrafts.isEmpty();
     }
 
-    private static void startNextStep(Minecraft minecraft, AbstractCraftingMenu menu) {
-        QueuedCraft queuedCraft = queuedSteps.removeFirst();
-        CraftingStep step = queuedCraft.step();
+    private static void startNextCraft(Minecraft minecraft, AbstractCraftingMenu menu) {
+        QueuedCraft nextCraft = queuedCrafts.removeFirst();
+        CraftingStep step = nextCraft.step();
         activeCraft = new ActiveCraft(
                 step,
                 menu.containerId,
                 step.crafts(),
-                queuedCraft.takeResultToCursor(),
-                queuedCraft.useMaxItems()
+                nextCraft.takeResultToCursor(),
+                nextCraft.useMaxItems()
         );
         placeRecipe(minecraft, activeCraft, menu);
     }
 
     private static void placeRecipe(Minecraft minecraft, ActiveCraft active, AbstractCraftingMenu menu) {
-        active.phase(Phase.WAITING_FOR_PLACEMENT);
-        active.expectedStateId(menu.getStateId());
-        active.ticksWaiting(0);
+        waitForMenuUpdate(active, Phase.WAITING_FOR_PLACEMENT, menu);
         minecraft.gameMode.handlePlaceRecipe(
                 menu.containerId,
-                active.step().recipe().id(),
-                active.useMaxItems()
+                active.step.recipe().id(),
+                active.useMaxItems
         );
     }
 
     private static void takeResult(Minecraft minecraft, ActiveCraft active, AbstractCraftingMenu menu) {
-        if (!menu.getResultSlot().getItem().is(active.step().output())) {
-            stop("the server could not place " + itemName(active.step().output()));
+        if (!menu.getResultSlot().getItem().is(active.step.output())) {
+            stop("the server could not place " + itemName(active.step.output()));
             return;
         }
 
-        active.phase(Phase.WAITING_FOR_CRAFT);
-        active.expectedStateId(menu.getStateId());
-        active.ticksWaiting(0);
+        waitForMenuUpdate(active, Phase.WAITING_FOR_CRAFT, menu);
         minecraft.gameMode.handleContainerInput(
                 menu.containerId,
                 menu.getResultSlot().index,
                 0,
-                active.takeResultToCursor() ? ContainerInput.PICKUP : ContainerInput.QUICK_MOVE,
+                active.takeResultToCursor ? ContainerInput.PICKUP : ContainerInput.QUICK_MOVE,
                 minecraft.player
         );
     }
 
+    private static void waitForMenuUpdate(ActiveCraft active, Phase phase, AbstractCraftingMenu menu) {
+        active.phase = phase;
+        active.expectedStateId = menu.getStateId();
+        active.ticksWaiting = 0;
+    }
+
     private static void stop(String reason) {
-        LOGGER.warn("Stopped crafting executor: {}", reason);
+        LazyCraft.LOGGER.warn("Stopped crafting executor: {}", reason);
         activeCraft = null;
-        queuedSteps.clear();
+        queuedCrafts.clear();
         completionCallback = null;
     }
 
@@ -293,54 +289,6 @@ public final class CraftingExecutor {
             this.remainingCrafts = remainingCrafts;
             this.takeResultToCursor = takeResultToCursor;
             this.useMaxItems = useMaxItems;
-        }
-
-        private CraftingStep step() {
-            return step;
-        }
-
-        private int containerId() {
-            return containerId;
-        }
-
-        private boolean takeResultToCursor() {
-            return takeResultToCursor;
-        }
-
-        private boolean useMaxItems() {
-            return useMaxItems;
-        }
-
-        private int remainingCrafts() {
-            return remainingCrafts;
-        }
-
-        private void remainingCrafts(int remainingCrafts) {
-            this.remainingCrafts = remainingCrafts;
-        }
-
-        private int expectedStateId() {
-            return expectedStateId;
-        }
-
-        private void expectedStateId(int expectedStateId) {
-            this.expectedStateId = expectedStateId;
-        }
-
-        private int ticksWaiting() {
-            return ticksWaiting;
-        }
-
-        private void ticksWaiting(int ticksWaiting) {
-            this.ticksWaiting = ticksWaiting;
-        }
-
-        private Phase phase() {
-            return phase;
-        }
-
-        private void phase(Phase phase) {
-            this.phase = phase;
         }
     }
 }
