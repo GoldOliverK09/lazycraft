@@ -4,7 +4,9 @@
   "compatibilityLevel": "JAVA_25",
   "client": [
     "ClientRecipeBookMixin",
-    "RecipeBookComponentMixin"
+    "RecipeBookComponentMixin",
+    "RecipeBookPageMixin",
+    "RecipeButtonMixin"
   ],
   "injectors": {
     "defaultRequire": 1

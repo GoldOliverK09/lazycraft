@@ -4,11 +4,13 @@ import klumpler.lazycraft.client.config.LazyCraftConfig;
 import klumpler.lazycraft.client.config.LazyCraftConfigScreen;
 import klumpler.lazycraft.client.planner.CraftingExecutor;
 import klumpler.lazycraft.client.planner.RecipePlanner;
+import klumpler.lazycraft.client.recipebook.VisibleRecipeCraftability;
 import me.shedaniel.autoconfig.AutoConfig;
 import me.shedaniel.autoconfig.serializer.GsonConfigSerializer;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -77,6 +79,9 @@ public class LazyCraftClient implements ClientModInitializer {
     public void onInitializeClient() {
         AutoConfig.register(LazyCraftConfig.class, GsonConfigSerializer::new);
         ClientTickEvents.END_CLIENT_TICK.register(CraftingExecutor::tick);
+        ClientTickEvents.END_CLIENT_TICK.register(VisibleRecipeCraftability::tick);
+        ClientLifecycleEvents.CLIENT_STOPPING.register(ignored ->
+                VisibleRecipeCraftability.shutdown());
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, ignoredRegistryAccess) ->
                 dispatcher.register(literal("lazycraft")

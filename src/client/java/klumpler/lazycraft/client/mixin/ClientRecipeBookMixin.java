@@ -1,6 +1,7 @@
 package klumpler.lazycraft.client.mixin;
 
 import klumpler.lazycraft.client.planner.RecipeIndex;
+import klumpler.lazycraft.client.recipebook.VisibleRecipeCraftability;
 import net.minecraft.client.ClientRecipeBook;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import org.spongepowered.asm.mixin.Mixin;
@@ -19,5 +20,6 @@ public class ClientRecipeBookMixin {
     @Inject(method = "rebuildCollections", at = @At("TAIL"))
     private void lazycraft$rebuildLookup(CallbackInfo ci) {
         RecipeIndex.rebuildLookup(this.allCollections);
+        VisibleRecipeCraftability.clear();
     }
 }

@@ -5,14 +5,11 @@ import klumpler.lazycraft.client.config.LazyCraftConfig;
 import me.shedaniel.autoconfig.AutoConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.util.context.ContextMap;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.Ingredient;
-import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
-import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 
 import java.util.*;
+import java.util.concurrent.CancellationException;
+import java.util.function.BooleanSupplier;
 
 public final class RecipePlanner {
     private RecipePlanner() {
@@ -49,24 +46,43 @@ public final class RecipePlanner {
             throw new IllegalArgumentException("quantity must be positive");
         }
 
-        var level = Minecraft.getInstance().level;
-        if (level == null) {
+        return captureSession(inventory, scorer)
+                .flatMap(session -> session.plan(target, quantity));
+    }
+
+    /**
+     * Captures every live Minecraft/config input needed by the planner.
+     * The returned session performs only detached, immutable-data reads and may be searched
+     * on a worker thread.
+     */
+    public static Optional<PlanningSession> createWorkerSession(
+            InventorySnapshot inventory,
+            LazyCraftConfig.ScoringMode scoringMode
+    ) {
+        Objects.requireNonNull(scoringMode, "scoringMode cannot be null");
+        return captureSession(inventory, scoringMode.scorer());
+    }
+
+    private static Optional<PlanningSession> captureSession(
+            InventorySnapshot inventory,
+            PlanScorer scorer
+    ) {
+        Objects.requireNonNull(inventory, "inventory cannot be null");
+        Objects.requireNonNull(scorer, "scorer cannot be null");
+
+        if (Minecraft.getInstance().level == null) {
             return Optional.empty();
         }
 
         LazyCraftConfig config = config();
-        SearchContext search = new SearchContext(
-                target,
-                quantity,
+        return Optional.of(new PlanningSession(
+                PlanningInventory.from(inventory),
                 scorer,
-                SlotDisplayContext.fromLevel(level),
+                RecipeIndex.snapshot(),
                 CraftingGrid.current().orElse(CraftingGrid.CRAFTING_TABLE),
                 config.recursionDepth,
                 config.maxCandidatesPerLayer
-        );
-        return search.produce(target, quantity, inventory.copy(), Set.of(), 0, false).stream()
-                .min(search.comparator())
-                .map(search::toPlan);
+        ));
     }
 
     public static void logPlan(CraftPlan plan, long startNanos) {
@@ -97,24 +113,102 @@ public final class RecipePlanner {
         return AutoConfig.getConfigHolder(LazyCraftConfig.class).getConfig();
     }
 
+    public static final class PlanningSession {
+        private final PlanningInventory inventory;
+        private final PlanScorer scorer;
+        private final RecipeIndex.Snapshot recipeIndex;
+        private final CraftingGrid craftingGrid;
+        private final int maxSearchDepth;
+        private final int maxCandidatesPerLayer;
+
+        private PlanningSession(
+                PlanningInventory inventory,
+                PlanScorer scorer,
+                RecipeIndex.Snapshot recipeIndex,
+                CraftingGrid craftingGrid,
+                int maxSearchDepth,
+                int maxCandidatesPerLayer
+        ) {
+            this.inventory = inventory;
+            this.scorer = scorer;
+            this.recipeIndex = recipeIndex;
+            this.craftingGrid = craftingGrid;
+            this.maxSearchDepth = maxSearchDepth;
+            this.maxCandidatesPerLayer = maxCandidatesPerLayer;
+        }
+
+        public long recipeIndexGeneration() {
+            return recipeIndex.generation();
+        }
+
+        public Optional<CraftPlan> plan(Item target) {
+            return plan(target, 1);
+        }
+
+        public Optional<CraftPlan> plan(Item target, int quantity) {
+            return plan(target, quantity, () -> false);
+        }
+
+        public Optional<CraftPlan> plan(
+                Item target,
+                int quantity,
+                BooleanSupplier cancellation
+        ) {
+            Objects.requireNonNull(target, "target cannot be null");
+            Objects.requireNonNull(cancellation, "cancellation cannot be null");
+            if (quantity <= 0) {
+                throw new IllegalArgumentException("quantity must be positive");
+            }
+
+            SearchContext search = new SearchContext(
+                    target,
+                    quantity,
+                    scorer,
+                    recipeIndex,
+                    craftingGrid,
+                    maxSearchDepth,
+                    maxCandidatesPerLayer,
+                    cancellation
+            );
+            search.ensureNotCancelled();
+            return search.produce(
+                            target,
+                            quantity,
+                            inventory.copy(),
+                            Set.of(),
+                            0,
+                            false
+                    )
+                    .stream()
+                    .min(search.comparator())
+                    .map(search::toPlan);
+        }
+    }
+
     private record SearchContext(
             Item target,
             int targetQuantity,
             PlanScorer scorer,
-            ContextMap context,
+            RecipeIndex.Snapshot recipeIndex,
             CraftingGrid craftingGrid,
             int maxSearchDepth,
-            int maxCandidatesPerLayer
+            int maxCandidatesPerLayer,
+            BooleanSupplier cancellation
     ) {
+
+        private static long ingredientCost(List<List<Item>> requirements, int crafts) {
+            return Math.multiplyExact((long) requirements.size(), crafts);
+        }
 
         private List<SearchResult> produce(
                 Item item,
                 int quantity,
-                InventorySnapshot inventory,
+                PlanningInventory inventory,
                 Set<Item> path,
                 int depth,
                 boolean mayUseExistingOutput
         ) {
+            ensureNotCancelled();
             int existingOutputCount = mayUseExistingOutput ? inventory.getAmount(item) : 0;
             if (mayUseExistingOutput && existingOutputCount >= quantity) {
                 return List.of(SearchResult.empty(inventory));
@@ -127,20 +221,21 @@ public final class RecipePlanner {
             int missing = quantity - existingOutputCount;
             Set<Item> nextPath = new HashSet<>(path);
             nextPath.add(item);
-            List<SearchResult> candidates = new ArrayList<>();
+            StableTopK<SearchResult> candidates = bestCandidates();
 
-            for (RecipeDisplayEntry recipe : RecipeIndex.recipesProducing(item)) {
-                if (!craftingGrid.supports(recipe, context)) {
+            for (RecipeIndex.ResolvedRecipe recipe : recipeIndex.recipesProducing(item)) {
+                ensureNotCancelled();
+                if (!recipe.supports(craftingGrid)) {
                     continue;
                 }
 
-                Optional<List<Ingredient>> optionalRequirements = recipe.craftingRequirements();
+                Optional<List<List<Item>>> optionalRequirements = recipe.requirements();
                 if (optionalRequirements.isEmpty()) {
                     continue;
                 }
-                List<Ingredient> requirements = optionalRequirements.get();
+                List<List<Item>> requirements = optionalRequirements.get();
 
-                int outputCount = outputCount(recipe, item);
+                int outputCount = recipe.outputCount(item);
                 if (outputCount == 0) {
                     continue;
                 }
@@ -153,21 +248,22 @@ public final class RecipePlanner {
                         nextPath,
                         depth
                 )) {
-                    InventorySnapshot craftedInventory = satisfied.inventory().copy();
-                    addOutputs(craftedInventory, recipe, crafts);
+                    ensureNotCancelled();
+                    PlanningInventory craftedInventory = satisfied.inventory().copy();
+                    recipe.addOutputs(craftedInventory, crafts);
                     candidates.add(satisfied.addStep(
-                            new CraftingStep(recipe, item, crafts),
+                            new CraftingStep(recipe.entry(), item, crafts),
                             ingredientCost(requirements, crafts),
                             craftedInventory
                     ));
                 }
             }
 
-            return retainBest(candidates);
+            return finishCandidates(candidates);
         }
 
         private List<SearchResult> satisfyRequirements(
-                List<Ingredient> requirements,
+                List<List<Item>> requirements,
                 int crafts,
                 SearchResult start,
                 Set<Item> path,
@@ -175,19 +271,23 @@ public final class RecipePlanner {
         ) {
             List<SearchResult> candidates = List.of(start);
 
-            for (Ingredient ingredient : requirements) {
-                List<SearchResult> nextCandidates = new ArrayList<>();
+            for (List<Item> acceptedItems : requirements) {
+                ensureNotCancelled();
+                StableTopK<SearchResult> nextCandidates = bestCandidates();
                 for (SearchResult candidate : candidates) {
-                    nextCandidates.addAll(satisfyIngredient(
-                            ingredient,
+                    ensureNotCancelled();
+                    for (SearchResult satisfied : satisfyIngredient(
+                            acceptedItems,
                             crafts,
                             candidate,
                             path,
                             depth + 1
-                    ));
+                    )) {
+                        nextCandidates.add(satisfied);
+                    }
                 }
 
-                candidates = retainBest(nextCandidates);
+                candidates = finishCandidates(nextCandidates);
                 if (candidates.isEmpty()) {
                     return List.of();
                 }
@@ -197,26 +297,27 @@ public final class RecipePlanner {
         }
 
         private List<SearchResult> satisfyIngredient(
-                Ingredient ingredient,
+                List<Item> acceptedItems,
                 int quantity,
                 SearchResult start,
                 Set<Item> path,
                 int depth
         ) {
-            Set<Item> acceptedItems = matchingItems(ingredient);
+            ensureNotCancelled();
             if (acceptedItems.isEmpty()) {
                 return List.of();
             }
 
-            InventorySnapshot directlyConsumed = start.inventory().copy();
+            PlanningInventory directlyConsumed = start.inventory().copy();
             if (directlyConsumed.consumeItems(acceptedItems, quantity)) {
                 return List.of(start.withInventory(directlyConsumed));
             }
 
             int missing = quantity - start.inventory().availableItems(acceptedItems);
-            List<SearchResult> candidates = new ArrayList<>();
+            StableTopK<SearchResult> candidates = bestCandidates();
 
             for (Item output : acceptedItems) {
+                ensureNotCancelled();
                 int requiredOutputAmount = Math.addExact(
                         start.inventory().getAmount(output),
                         missing
@@ -230,53 +331,19 @@ public final class RecipePlanner {
                         depth,
                         true
                 )) {
-                    InventorySnapshot consumedInventory = produced.inventory().copy();
+                    ensureNotCancelled();
+                    PlanningInventory consumedInventory = produced.inventory().copy();
                     if (consumedInventory.consumeItems(acceptedItems, quantity)) {
                         candidates.add(start.combine(produced, consumedInventory));
                     }
                 }
             }
 
-            return retainBest(candidates);
+            return finishCandidates(candidates);
         }
 
-        private Set<Item> matchingItems(Ingredient ingredient) {
-            Set<Item> items = new LinkedHashSet<>();
-            for (ItemStack stack : ingredient.display().resolveForStacks(context)) {
-                if (!stack.isEmpty()) {
-                    items.add(stack.getItem());
-                }
-            }
-            return items;
-        }
-
-        private int outputCount(RecipeDisplayEntry recipe, Item item) {
-            return recipe.resultItems(context).stream()
-                    .filter(output -> output.is(item))
-                    .mapToInt(ItemStack::getCount)
-                    .sum();
-        }
-
-        private void addOutputs(InventorySnapshot inventory, RecipeDisplayEntry recipe, int crafts) {
-            for (ItemStack output : recipe.resultItems(context)) {
-                if (output.isEmpty()) {
-                    continue;
-                }
-
-                ItemStack craftedOutput = output.copy();
-                craftedOutput.setCount(Math.multiplyExact(craftedOutput.getCount(), crafts));
-                inventory.add(craftedOutput);
-            }
-        }
-
-        private List<SearchResult> retainBest(List<SearchResult> candidates) {
-            if (candidates.isEmpty()) {
-                return List.of();
-            }
-
-            candidates.sort(comparator());
-            int end = Math.min(candidates.size(), maxCandidatesPerLayer);
-            return List.copyOf(candidates.subList(0, end));
+        private StableTopK<SearchResult> bestCandidates() {
+            return new StableTopK<>(maxCandidatesPerLayer, comparator());
         }
 
         private Comparator<SearchResult> comparator() {
@@ -285,8 +352,9 @@ public final class RecipePlanner {
                     .thenComparingInt(result -> result.steps().size());
         }
 
-        private long score(SearchResult result) {
-            return scorer.score(toPlan(result));
+        private List<SearchResult> finishCandidates(StableTopK<SearchResult> candidates) {
+            ensureNotCancelled();
+            return candidates.toList();
         }
 
         private CraftPlan toPlan(SearchResult result) {
@@ -297,13 +365,20 @@ public final class RecipePlanner {
             return dividend / divisor + (dividend % divisor == 0 ? 0 : 1);
         }
 
-        private static long ingredientCost(List<Ingredient> requirements, int crafts) {
-            return Math.multiplyExact((long) requirements.size(), crafts);
+        private long score(SearchResult result) {
+            ensureNotCancelled();
+            return scorer.score(toPlan(result));
+        }
+
+        private void ensureNotCancelled() {
+            if (Thread.currentThread().isInterrupted() || cancellation.getAsBoolean()) {
+                throw new CancellationException();
+            }
         }
     }
 
     private record SearchResult(
-            InventorySnapshot inventory,
+            PlanningInventory inventory,
             List<CraftingStep> steps,
             long totalIngredients
     ) {
@@ -311,15 +386,15 @@ public final class RecipePlanner {
             steps = List.copyOf(steps);
         }
 
-        private static SearchResult empty(InventorySnapshot inventory) {
+        private static SearchResult empty(PlanningInventory inventory) {
             return new SearchResult(inventory, List.of(), 0);
         }
 
-        private SearchResult withInventory(InventorySnapshot inventory) {
+        private SearchResult withInventory(PlanningInventory inventory) {
             return new SearchResult(inventory, steps, totalIngredients);
         }
 
-        private SearchResult combine(SearchResult next, InventorySnapshot inventory) {
+        private SearchResult combine(SearchResult next, PlanningInventory inventory) {
             List<CraftingStep> combinedSteps = new ArrayList<>(steps.size() + next.steps.size());
             combinedSteps.addAll(steps);
             combinedSteps.addAll(next.steps);
@@ -333,7 +408,7 @@ public final class RecipePlanner {
         private SearchResult addStep(
                 CraftingStep step,
                 long ingredientCost,
-                InventorySnapshot inventory
+                PlanningInventory inventory
         ) {
             List<CraftingStep> nextSteps = new ArrayList<>(steps.size() + 1);
             nextSteps.addAll(steps);

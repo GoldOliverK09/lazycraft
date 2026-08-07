@@ -39,6 +39,12 @@ public final class InventorySnapshot {
         return new InventorySnapshot(stacks.stream().map(ItemStack::copy).toList());
     }
 
+    List<ItemAmount> itemAmounts() {
+        return stacks.stream()
+                .map(stack -> new ItemAmount(stack.getItem(), stack.getCount()))
+                .toList();
+    }
+
     public int availableItems(Collection<Item> acceptedItems) {
         Objects.requireNonNull(acceptedItems, "acceptedItems cannot be null");
         return countMatching(stack -> acceptedItems.contains(stack.getItem()));
@@ -109,5 +115,8 @@ public final class InventorySnapshot {
         if (quantity < 0) {
             throw new IllegalArgumentException("quantity cannot be negative");
         }
+    }
+
+    record ItemAmount(Item item, int count) {
     }
 }
