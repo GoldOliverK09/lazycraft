@@ -55,7 +55,7 @@ public abstract class RecipeBookComponentMixin {
                 return;
             }
 
-            if (lazycraft$executeVanillaRecipe(recipeCollection, recipe)) {
+            if (lazycraft$executeVanillaRecipe(recipeCollection, recipe, useMaxItems)) {
                 cir.setReturnValue(true);
             }
             return;
@@ -133,7 +133,8 @@ public abstract class RecipeBookComponentMixin {
     @Unique
     private boolean lazycraft$executeVanillaRecipe(
             RecipeCollection recipeCollection,
-            RecipeDisplayId recipe
+            RecipeDisplayId recipe,
+            boolean useMaxItems
     ) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null) {
@@ -148,7 +149,7 @@ public abstract class RecipeBookComponentMixin {
                         .filter(stack -> !stack.isEmpty())
                         .findFirst()
                         .map(stack -> new CraftingStep(recipeEntry, stack.getItem(), 1)))
-                .map(CraftingExecutor::execute)
+                .map(step -> CraftingExecutor.execute(step, useMaxItems))
                 .orElse(false);
     }
 }
