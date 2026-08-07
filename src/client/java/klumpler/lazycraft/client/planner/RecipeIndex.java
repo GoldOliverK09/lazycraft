@@ -1,5 +1,6 @@
 package klumpler.lazycraft.client.planner;
 
+import klumpler.lazycraft.LazyCraft;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import net.minecraft.util.context.ContextMap;
@@ -7,8 +8,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
 import net.minecraft.world.item.crafting.display.SlotDisplayContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,14 +15,13 @@ import java.util.List;
 import java.util.Map;
 
 public final class RecipeIndex {
-    private static final Logger LOGGER = LoggerFactory.getLogger("lazycraft");
     private static volatile Map<Item, List<RecipeDisplayEntry>> recipesByOutput = Map.of();
 
     private RecipeIndex() {
     }
 
     public static void rebuildLookup(List<RecipeCollection> collections) {
-        long start = System.nanoTime();
+        long startNanos = System.nanoTime();
         var level = Minecraft.getInstance().level;
 
         if (level == null) {
@@ -32,23 +30,23 @@ public final class RecipeIndex {
         }
 
         ContextMap context = SlotDisplayContext.fromLevel(level);
-        Map<Item, List<RecipeDisplayEntry>> next = new HashMap<>();
-        int recipeCount = 0;
+        Map<Item, List<RecipeDisplayEntry>> rebuiltIndex = new HashMap<>();
+        int indexedResultCount = 0;
 
         for (RecipeCollection collection : collections) {
             for (RecipeDisplayEntry entry : collection.getRecipes()) {
                 for (ItemStack output : entry.resultItems(context)) {
-                    next.computeIfAbsent(output.getItem(), ignored -> new ArrayList<>()).add(entry);
-                    recipeCount++;
+                    rebuiltIndex.computeIfAbsent(output.getItem(), ignored -> new ArrayList<>()).add(entry);
+                    indexedResultCount++;
                 }
             }
         }
 
-        recipesByOutput = next;
-        LOGGER.info(
+        recipesByOutput = rebuiltIndex;
+        LazyCraft.LOGGER.info(
                 "Recipe lookup took {} ms for {} recipes ({} unique outputs)",
-                (System.nanoTime() - start) / 1_000_000.0,
-                recipeCount,
+                (System.nanoTime() - startNanos) / 1_000_000.0,
+                indexedResultCount,
                 recipesByOutput.size()
         );
     }

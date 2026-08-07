@@ -21,14 +21,13 @@ public final class InventorySnapshot {
     }
 
     public static InventorySnapshot from(Player player) {
-        List<ItemStack> stacks = new ArrayList<>();
         if (player == null) {
             throw new IllegalArgumentException("Player cannot be null");
         }
 
+        List<ItemStack> stacks = new ArrayList<>();
         for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
             ItemStack stack = player.getInventory().getItem(slot);
-
             if (!stack.isEmpty()) {
                 stacks.add(stack.copy());
             }
@@ -42,18 +41,12 @@ public final class InventorySnapshot {
 
     public int availableItems(Collection<Item> acceptedItems) {
         Objects.requireNonNull(acceptedItems, "acceptedItems cannot be null");
-        return stacks.stream()
-                .filter(stack -> acceptedItems.contains(stack.getItem()))
-                .mapToInt(ItemStack::getCount)
-                .sum();
+        return countMatching(stack -> acceptedItems.contains(stack.getItem()));
     }
 
     public int getAmount(Item item) {
         Objects.requireNonNull(item, "item cannot be null");
-        return stacks.stream()
-                .filter(stack -> stack.is(item))
-                .mapToInt(ItemStack::getCount)
-                .sum();
+        return countMatching(stack -> stack.is(item));
     }
 
     public boolean has(Item item, int amount) {
@@ -67,8 +60,7 @@ public final class InventorySnapshot {
             return;
         }
 
-        ItemStack copy = stack.copy();
-        stacks.add(copy);
+        stacks.add(stack.copy());
     }
 
     public boolean consumeItems(Collection<Item> acceptedItems, int quantity) {
@@ -82,7 +74,7 @@ public final class InventorySnapshot {
             return true;
         }
 
-        if (stacks.stream().filter(matcher).mapToInt(ItemStack::getCount).sum() < quantity) {
+        if (countMatching(matcher) < quantity) {
             return false;
         }
 
@@ -105,6 +97,14 @@ public final class InventorySnapshot {
 
         return true;
     }
+
+    private int countMatching(Predicate<ItemStack> matcher) {
+        return stacks.stream()
+                .filter(matcher)
+                .mapToInt(ItemStack::getCount)
+                .sum();
+    }
+
     private static void validateQuantity(int quantity) {
         if (quantity < 0) {
             throw new IllegalArgumentException("quantity cannot be negative");

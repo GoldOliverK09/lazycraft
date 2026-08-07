@@ -17,8 +17,8 @@ public record CraftingGrid(int width, int height) {
     public static final CraftingGrid CRAFTING_TABLE = new CraftingGrid(3, 3);
 
     public static Optional<CraftingGrid> current() {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null || !(client.player.containerMenu instanceof AbstractCraftingMenu menu)) {
             return Optional.empty();
         }
         return Optional.of(new CraftingGrid(menu.getGridWidth(), menu.getGridHeight()));
@@ -30,10 +30,11 @@ public record CraftingGrid(int width, int height) {
                     .anyMatch(stack -> stack.is(Items.CRAFTING_TABLE));
         }
 
-        if (recipe.display() instanceof ShapedCraftingRecipeDisplay shaped) {
+        var display = recipe.display();
+        if (display instanceof ShapedCraftingRecipeDisplay shaped) {
             return shaped.width() <= width && shaped.height() <= height;
         }
-        if (recipe.display() instanceof ShapelessCraftingRecipeDisplay shapeless) {
+        if (display instanceof ShapelessCraftingRecipeDisplay shapeless) {
             return shapeless.ingredients().size() <= width * height;
         }
         return false;
