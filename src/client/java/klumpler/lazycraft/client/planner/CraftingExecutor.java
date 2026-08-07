@@ -20,8 +20,10 @@ import java.util.*;
 public final class CraftingExecutor {
     private static final Logger LOGGER = LoggerFactory.getLogger("lazycraft");
     private static final int UPDATE_TIMEOUT_TICKS = 40;
+    private static final int STEP_SETTLE_TICKS = 1;
     private static final Deque<QueuedCraft> queuedSteps = new ArrayDeque<>();
     private static ActiveCraft activeCraft;
+    private static Runnable completionCallback;
 
     private CraftingExecutor() {
     }
@@ -51,7 +53,7 @@ public final class CraftingExecutor {
     }
 
     /**
-     * Starts a server-synchronised execution of the supplied planner step.
+     * Starts a server-synchronized execution of the supplied planner step.
      */
     public static boolean execute(CraftingStep step) {
         Objects.requireNonNull(step, "step cannot be null");
@@ -71,8 +73,15 @@ public final class CraftingExecutor {
      * Executes every step in a planner result, including its final requested recipe.
      */
     public static boolean execute(CraftPlan plan) {
+        return execute(plan, null);
+    }
+
+    /**
+     * Executes a plan and runs {@code onComplete} after its final craft succeeds.
+     */
+    public static boolean execute(CraftPlan plan, Runnable onComplete) {
         Objects.requireNonNull(plan, "plan cannot be null");
-        return executeSteps(plan.steps());
+        return executeSteps(plan.steps(), onComplete);
     }
 
     /**
@@ -80,6 +89,13 @@ public final class CraftingExecutor {
      * Dependency results still use quick-move so later recipes can use them.
      */
     public static boolean executeToCursor(CraftPlan plan) {
+        return executeToCursor(plan, null);
+    }
+
+    /**
+     * Executes a plan, leaves its final result on the cursor, then runs {@code onComplete}.
+     */
+    public static boolean executeToCursor(CraftPlan plan, Runnable onComplete) {
         Objects.requireNonNull(plan, "plan cannot be null");
         if (plan.steps().isEmpty()) {
             return false;
@@ -93,16 +109,24 @@ public final class CraftingExecutor {
                     false
             ));
         }
-        return executeQueuedSteps(queuedCrafts);
+        return executeQueuedSteps(queuedCrafts, onComplete);
     }
 
     private static boolean executeSteps(List<CraftingStep> steps) {
+        return executeSteps(steps, null);
+    }
+
+    private static boolean executeSteps(List<CraftingStep> steps, Runnable onComplete) {
         return executeQueuedSteps(steps.stream()
                 .map(step -> new QueuedCraft(step, false, false))
-                .toList());
+                .toList(), onComplete);
     }
 
     private static boolean executeQueuedSteps(List<QueuedCraft> steps) {
+        return executeQueuedSteps(steps, null);
+    }
+
+    private static boolean executeQueuedSteps(List<QueuedCraft> steps, Runnable onComplete) {
         if (activeCraft != null || !queuedSteps.isEmpty() || steps.isEmpty()) {
             return false;
         }
@@ -113,6 +137,7 @@ public final class CraftingExecutor {
         }
 
         queuedSteps.addAll(steps);
+        completionCallback = onComplete;
         startNextStep(minecraft, menu);
         return true;
     }
@@ -132,6 +157,17 @@ public final class CraftingExecutor {
         }
 
         activeCraft.ticksWaiting(activeCraft.ticksWaiting() + 1);
+
+        if (activeCraft.phase() == Phase.WAITING_TO_START_NEXT_STEP) {
+            if (activeCraft.ticksWaiting() < STEP_SETTLE_TICKS) {
+                return;
+            }
+
+            activeCraft = null;
+            startNextStep(minecraft, menu);
+            return;
+        }
+
         if (activeCraft.ticksWaiting() > UPDATE_TIMEOUT_TICKS) {
             stop("the server did not update the crafting table in time");
             return;
@@ -147,9 +183,12 @@ public final class CraftingExecutor {
                 activeCraft.remainingCrafts(activeCraft.remainingCrafts() - 1);
                 if (activeCraft.remainingCrafts() == 0) {
                     LOGGER.info("Finished crafting {}", itemName(activeCraft.step().output()));
-                    activeCraft = null;
                     if (!queuedSteps.isEmpty()) {
-                        startNextStep(minecraft, menu);
+                        activeCraft.phase(Phase.WAITING_TO_START_NEXT_STEP);
+                        activeCraft.ticksWaiting(0);
+                    } else {
+                        activeCraft = null;
+                        runCompletionCallback();
                     }
                 } else {
                     placeRecipe(minecraft, activeCraft, menu);
@@ -208,6 +247,15 @@ public final class CraftingExecutor {
         LOGGER.warn("Stopped crafting executor: {}", reason);
         activeCraft = null;
         queuedSteps.clear();
+        completionCallback = null;
+    }
+
+    private static void runCompletionCallback() {
+        Runnable callback = completionCallback;
+        completionCallback = null;
+        if (callback != null) {
+            callback.run();
+        }
     }
 
     private static String itemName(Item item) {
@@ -216,7 +264,8 @@ public final class CraftingExecutor {
 
     private enum Phase {
         WAITING_FOR_PLACEMENT,
-        WAITING_FOR_CRAFT
+        WAITING_FOR_CRAFT,
+        WAITING_TO_START_NEXT_STEP
     }
 
     private record QueuedCraft(CraftingStep step, boolean takeResultToCursor, boolean useMaxItems) {
