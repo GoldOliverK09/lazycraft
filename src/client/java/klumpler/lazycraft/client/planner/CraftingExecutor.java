@@ -59,6 +59,15 @@ public final class CraftingExecutor {
     }
 
     /**
+     * Executes one selected recipe, optionally asking vanilla to fill the grid
+     * with the maximum number of ingredient sets available.
+     */
+    public static boolean execute(CraftingStep step, boolean useMaxItems) {
+        Objects.requireNonNull(step, "step cannot be null");
+        return executeQueuedSteps(List.of(new QueuedCraft(step, false, useMaxItems)));
+    }
+
+    /**
      * Executes every step in a planner result, including its final requested recipe.
      */
     public static boolean execute(CraftPlan plan) {
@@ -80,7 +89,8 @@ public final class CraftingExecutor {
         for (int index = 0; index < plan.steps().size(); index++) {
             queuedCrafts.add(new QueuedCraft(
                     plan.steps().get(index),
-                    index == plan.steps().size() - 1
+                    index == plan.steps().size() - 1,
+                    false
             ));
         }
         return executeQueuedSteps(queuedCrafts);
@@ -88,7 +98,7 @@ public final class CraftingExecutor {
 
     private static boolean executeSteps(List<CraftingStep> steps) {
         return executeQueuedSteps(steps.stream()
-                .map(step -> new QueuedCraft(step, false))
+                .map(step -> new QueuedCraft(step, false, false))
                 .toList());
     }
 
@@ -155,7 +165,13 @@ public final class CraftingExecutor {
     private static void startNextStep(Minecraft minecraft, AbstractCraftingMenu menu) {
         QueuedCraft queuedCraft = queuedSteps.removeFirst();
         CraftingStep step = queuedCraft.step();
-        activeCraft = new ActiveCraft(step, menu.containerId, step.crafts(), queuedCraft.takeResultToCursor());
+        activeCraft = new ActiveCraft(
+                step,
+                menu.containerId,
+                step.crafts(),
+                queuedCraft.takeResultToCursor(),
+                queuedCraft.useMaxItems()
+        );
         placeRecipe(minecraft, activeCraft, menu);
     }
 
@@ -163,7 +179,11 @@ public final class CraftingExecutor {
         active.phase(Phase.WAITING_FOR_PLACEMENT);
         active.expectedStateId(menu.getStateId());
         active.ticksWaiting(0);
-        minecraft.gameMode.handlePlaceRecipe(menu.containerId, active.step().recipe().id(), false);
+        minecraft.gameMode.handlePlaceRecipe(
+                menu.containerId,
+                active.step().recipe().id(),
+                active.useMaxItems()
+        );
     }
 
     private static void takeResult(Minecraft minecraft, ActiveCraft active, AbstractCraftingMenu menu) {
@@ -199,23 +219,31 @@ public final class CraftingExecutor {
         WAITING_FOR_CRAFT
     }
 
-    private record QueuedCraft(CraftingStep step, boolean takeResultToCursor) {
+    private record QueuedCraft(CraftingStep step, boolean takeResultToCursor, boolean useMaxItems) {
     }
 
     private static final class ActiveCraft {
         private final CraftingStep step;
         private final int containerId;
         private final boolean takeResultToCursor;
+        private final boolean useMaxItems;
         private int remainingCrafts;
         private int expectedStateId;
         private int ticksWaiting;
         private Phase phase = Phase.WAITING_FOR_PLACEMENT;
 
-        private ActiveCraft(CraftingStep step, int containerId, int remainingCrafts, boolean takeResultToCursor) {
+        private ActiveCraft(
+                CraftingStep step,
+                int containerId,
+                int remainingCrafts,
+                boolean takeResultToCursor,
+                boolean useMaxItems
+        ) {
             this.step = step;
             this.containerId = containerId;
             this.remainingCrafts = remainingCrafts;
             this.takeResultToCursor = takeResultToCursor;
+            this.useMaxItems = useMaxItems;
         }
 
         private CraftingStep step() {
@@ -228,6 +256,10 @@ public final class CraftingExecutor {
 
         private boolean takeResultToCursor() {
             return takeResultToCursor;
+        }
+
+        private boolean useMaxItems() {
+            return useMaxItems;
         }
 
         private int remainingCrafts() {
