@@ -1,6 +1,8 @@
 package klumpler.lazycraft.client.planner;
 
 import klumpler.lazycraft.LazyCraft;
+import klumpler.lazycraft.client.config.LazyCraftConfig;
+import me.shedaniel.autoconfig.AutoConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.util.context.ContextMap;
@@ -17,11 +19,11 @@ import java.util.*;
  * The server remains authoritative for every placement and result-slot click.
  */
 public final class CraftingExecutor {
-    private static final int UPDATE_TIMEOUT_TICKS = 40;
-    private static final int STEP_SETTLE_TICKS = 1;
     private static final Deque<QueuedCraft> queuedCrafts = new ArrayDeque<>();
     private static ActiveCraft activeCraft;
     private static Runnable completionCallback;
+    private static int executionUpdateTimeoutTicks;
+    private static int executionStepDelayTicks;
 
     private CraftingExecutor() {
     }
@@ -128,6 +130,9 @@ public final class CraftingExecutor {
             return false;
         }
 
+        LazyCraftConfig config = AutoConfig.getConfigHolder(LazyCraftConfig.class).getConfig();
+        executionUpdateTimeoutTicks = config.serverUpdateTimeoutTicks;
+        executionStepDelayTicks = config.stepDelayTicks;
         queuedCrafts.addAll(craftsToQueue);
         completionCallback = onComplete;
         startNextCraft(minecraft, menu);
@@ -153,7 +158,7 @@ public final class CraftingExecutor {
         activeCraft.ticksWaiting++;
 
         if (activeCraft.phase == Phase.WAITING_TO_START_NEXT_STEP) {
-            if (activeCraft.ticksWaiting < STEP_SETTLE_TICKS) {
+            if (activeCraft.ticksWaiting < executionStepDelayTicks) {
                 return;
             }
 
@@ -162,7 +167,7 @@ public final class CraftingExecutor {
             return;
         }
 
-        if (activeCraft.ticksWaiting > UPDATE_TIMEOUT_TICKS) {
+        if (activeCraft.ticksWaiting > executionUpdateTimeoutTicks) {
             stop("the server did not update the crafting table in time");
             return;
         }

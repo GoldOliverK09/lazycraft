@@ -15,8 +15,6 @@ import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 import java.util.*;
 
 public final class RecipePlanner {
-    private static final int MAX_CANDIDATES_PER_LAYER = 64;
-
     private RecipePlanner() {
     }
 
@@ -56,13 +54,15 @@ public final class RecipePlanner {
             return Optional.empty();
         }
 
+        LazyCraftConfig config = config();
         SearchContext search = new SearchContext(
                 target,
                 quantity,
                 scorer,
                 SlotDisplayContext.fromLevel(level),
                 CraftingGrid.current().orElse(CraftingGrid.CRAFTING_TABLE),
-                config().recursionDepth
+                config.recursionDepth,
+                config.maxCandidatesPerLayer
         );
         return search.produce(target, quantity, inventory.copy(), Set.of(), 0, false).stream()
                 .min(search.comparator())
@@ -103,7 +103,8 @@ public final class RecipePlanner {
             PlanScorer scorer,
             ContextMap context,
             CraftingGrid craftingGrid,
-            int maxSearchDepth
+            int maxSearchDepth,
+            int maxCandidatesPerLayer
     ) {
 
         private List<SearchResult> produce(
@@ -274,7 +275,7 @@ public final class RecipePlanner {
             }
 
             candidates.sort(comparator());
-            int end = Math.min(candidates.size(), MAX_CANDIDATES_PER_LAYER);
+            int end = Math.min(candidates.size(), maxCandidatesPerLayer);
             return List.copyOf(candidates.subList(0, end));
         }
 
