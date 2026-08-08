@@ -9,7 +9,7 @@ intuitive to use.
 
 <img src="src/main/resources/assets/lazycraft/recursive-craft.gif" alt="Recursive Crafting Example">
 
-Crafting an item you do not have the ingredients for?
+Crafting an item you don't have the ingredients for?
 
 LazyCraft crafts those ingredients for you! (Provided you have the ingredients for those too)
 
