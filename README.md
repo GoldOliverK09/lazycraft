@@ -1,3 +1,5 @@
+<img src="src/main/resources/assets/lazycraft/icon.png" width="128" alt="LazyCraft Icon">
+
 # LazyCraft
 
 LazyCraft is a collection of crafting quality-of-life features designed to make Minecraft’s recipe book faster and more
@@ -5,15 +7,17 @@ intuitive to use.
 
 ## Recursive Crafting
 
-Double-click a recipe that vanilla considers uncraftable, and LazyCraft will attempt to craft all of its required
-components in order before placing the final item in your inventory.
+<img src="src/main/resources/assets/lazycraft/recursive-craft.gif" alt="Recursive Crafting Example">
 
-A single click still behaves similarly to vanilla and places the selected recipe into the crafting grid. When a recipe
-is recursively craftable, its output can also be taken from the result slot as though all the required ingredients were
-already available.
+Crafting an item you do not have the ingredients for?
 
-For example, crafting a dispenser can automatically craft the required sticks and bow first, provided you have all the
-necessary base ingredients.
+LazyCraft crafts those ingredients for you! (Provided you have the ingredients for those too)
+
+## Direct Recipe Book Crafting
+
+<img src="src/main/resources/assets/lazycraft/recipe-book-craft.gif" alt="Recipe Book Crafting Example">
+
+Double-click a recipe in the recipe book to have it automatically crafted and placed in your inventory.
 
 ## Inventory Space
 
@@ -37,7 +41,6 @@ systems may interfere with recursive crafting.
 ## Planned Features
 
 - Dynamic support for additional crafting stations
-- Recipe-book highlighting for recursively craftable recipes
 - Further crafting quality-of-life options
 
 ## Development Status
