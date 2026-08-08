@@ -62,6 +62,7 @@ public abstract class RecipeBookComponentMixin {
             }
 
             if (lazycraft$executeVanillaRecipe(recipeCollection, recipe, useMaxItems)) {
+                ghostSlots.clear();
                 cir.setReturnValue(true);
             }
             return;
@@ -155,8 +156,27 @@ public abstract class RecipeBookComponentMixin {
                 .filter(stack -> !stack.isEmpty())
                 .findFirst()
                 .map(stack -> new CraftingStep(entry, stack.getItem(), 1))
-                .map(step -> CraftingExecutor.execute(step, useMaxItems))
+                .map(step -> {
+                    Runnable restoreRecipe = () -> lazycraft$restoreVanillaRecipe(recipe);
+                    if (!useMaxItems && CraftingExecutor.executePlaced(step, restoreRecipe)) {
+                        return true;
+                    }
+                    return CraftingExecutor.execute(step, useMaxItems, restoreRecipe);
+                })
                 .orElse(false);
+    }
+
+    @Unique
+    private void lazycraft$restoreVanillaRecipe(RecipeDisplayId recipe) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null
+                || minecraft.gameMode == null
+                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
+            return;
+        }
+
+        // The server replaces this with a ghost recipe when another set cannot be placed.
+        minecraft.gameMode.handlePlaceRecipe(menu.containerId, recipe, false);
     }
 
     @Unique

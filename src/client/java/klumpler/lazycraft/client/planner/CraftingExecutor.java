@@ -30,8 +30,44 @@ public final class CraftingExecutor {
      * with the maximum number of ingredient sets available.
      */
     public static boolean execute(CraftingStep step, boolean useMaxItems) {
+        return execute(step, useMaxItems, null);
+    }
+
+    /**
+     * Executes one selected recipe and runs {@code onComplete} after it succeeds.
+     */
+    public static boolean execute(CraftingStep step, boolean useMaxItems, Runnable onComplete) {
         Objects.requireNonNull(step, "step cannot be null");
-        return executeQueuedCrafts(List.of(new QueuedCraft(step, false, useMaxItems)), null);
+        return executeQueuedCrafts(
+                List.of(new QueuedCraft(step, false, useMaxItems, false)),
+                onComplete
+        );
+    }
+
+    /**
+     * Takes a recipe result that vanilla has already placed in the crafting grid.
+     */
+    public static boolean executePlaced(CraftingStep step) {
+        return executePlaced(step, null);
+    }
+
+    /**
+     * Takes an already-placed recipe result and runs {@code onComplete} after it succeeds.
+     */
+    public static boolean executePlaced(CraftingStep step, Runnable onComplete) {
+        Objects.requireNonNull(step, "step cannot be null");
+
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null
+                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
+                || !menu.getResultSlot().getItem().is(step.output())) {
+            return false;
+        }
+
+        return executeQueuedCrafts(
+                List.of(new QueuedCraft(step, false, false, true)),
+                onComplete
+        );
     }
 
     /**
@@ -76,6 +112,7 @@ public final class CraftingExecutor {
             craftsToQueue.add(new QueuedCraft(
                     steps.get(index),
                     takeFinalResultToCursor && index == lastStepIndex,
+                    false,
                     false
             ));
         }
@@ -174,7 +211,11 @@ public final class CraftingExecutor {
                 nextCraft.takeResultToCursor(),
                 nextCraft.useMaxItems()
         );
-        placeRecipe(minecraft, activeCraft, menu);
+        if (nextCraft.recipeAlreadyPlaced()) {
+            takeResult(minecraft, activeCraft, menu);
+        } else {
+            placeRecipe(minecraft, activeCraft, menu);
+        }
     }
 
     private static void placeRecipe(Minecraft minecraft, ActiveCraft active, AbstractCraftingMenu menu) {
@@ -233,7 +274,12 @@ public final class CraftingExecutor {
         WAITING_TO_START_NEXT_STEP
     }
 
-    private record QueuedCraft(CraftingStep step, boolean takeResultToCursor, boolean useMaxItems) {
+    private record QueuedCraft(
+            CraftingStep step,
+            boolean takeResultToCursor,
+            boolean useMaxItems,
+            boolean recipeAlreadyPlaced
+    ) {
     }
 
     private static final class ActiveCraft {
