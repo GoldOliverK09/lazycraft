@@ -1,9 +1,6 @@
 package klumpler.lazycraft.client.config;
 
-import klumpler.lazycraft.client.planner.PlanScorer;
-import klumpler.lazycraft.client.planner.PlanScorers;
-
-public class LazyCraftConfig {
+public final class LazyCraftConfig {
     static final int MIN_RECURSION_DEPTH = 1;
     static final int MAX_RECURSION_DEPTH = 16;
     static final int DEFAULT_RECURSION_DEPTH = 6;
@@ -67,14 +64,6 @@ public class LazyCraftConfig {
     public enum ScoringMode {
         LEAST_TOTAL_INGREDIENTS,
         FEWEST_STEPS,
-        FEWEST_RECIPE_EXECUTIONS;
-
-        public PlanScorer scorer() {
-            return switch (this) {
-                case LEAST_TOTAL_INGREDIENTS -> PlanScorers.LEAST_TOTAL_INGREDIENTS;
-                case FEWEST_STEPS -> PlanScorers.FEWEST_STEPS;
-                case FEWEST_RECIPE_EXECUTIONS -> PlanScorers.FEWEST_RECIPE_EXECUTIONS;
-            };
-        }
+        FEWEST_RECIPE_EXECUTIONS
     }
 }

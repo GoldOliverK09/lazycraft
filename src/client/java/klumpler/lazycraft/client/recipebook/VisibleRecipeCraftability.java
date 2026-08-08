@@ -4,7 +4,6 @@ import klumpler.lazycraft.LazyCraft;
 import klumpler.lazycraft.client.config.LazyCraftConfig;
 import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import klumpler.lazycraft.client.planner.CraftingGrid;
-import klumpler.lazycraft.client.planner.InventorySnapshot;
 import klumpler.lazycraft.client.planner.RecipeIndex;
 import klumpler.lazycraft.client.planner.RecipePlanner;
 import net.minecraft.client.Minecraft;
@@ -35,16 +34,12 @@ public final class VisibleRecipeCraftability {
                 thread.setPriority(Math.max(Thread.MIN_PRIORITY, Thread.NORM_PRIORITY - 1));
                 return thread;
             });
-    private static final ConcurrentLinkedQueue<JobResult> COMPLETED_JOBS =
-            new ConcurrentLinkedQueue<>();
     private static final State EMPTY_STATE = State.empty();
 
     private static long nextGeneration;
-    private static long nextJobId;
     private static State activeState = EMPTY_STATE;
     private static Refresh refresh;
     private static Job inFlightJob;
-    private static JobTask inFlightTask;
     private static boolean shuttingDown;
 
     private VisibleRecipeCraftability() {
@@ -61,26 +56,14 @@ public final class VisibleRecipeCraftability {
             return;
         }
 
-        InventorySnapshot inventory = InventorySnapshot.from(environment.player);
-        RecipePlanner.PlanningSession session = RecipePlanner.createWorkerSession(
-                        inventory,
-                        environment.scoringMode
-                )
-                .filter(captured -> captured.recipeIndexGeneration()
-                        == environment.recipeIndexGeneration)
-                .orElse(null);
-        if (session == null) {
-            return;
-        }
-
-        Map<Item, Boolean> reusableResults = previousState.matches(environment)
-                ? new HashMap<>(previousState.craftableByOutput)
-                : new HashMap<>();
+        boolean canReuseState = previousState.matches(environment);
         refresh = new Refresh(
                 generation,
                 environment,
-                session,
-                reusableResults
+                canReuseState ? previousState.session : null,
+                canReuseState
+                        ? new HashMap<>(previousState.craftableByOutput)
+                        : new HashMap<>()
         );
     }
 
@@ -94,11 +77,12 @@ public final class VisibleRecipeCraftability {
 
         for (RecipeDisplayEntry entry
                 : collection.getSelectedRecipes(RecipeCollection.CraftableStatus.ANY)) {
-            entry.resultItems(context).stream()
-                    .filter(stack -> !stack.isEmpty())
-                    .findFirst()
-                    .map(ItemStack::getItem)
-                    .ifPresent(output -> refresh.track(entry.id(), output));
+            for (ItemStack result : entry.resultItems(context)) {
+                if (!result.isEmpty()) {
+                    refresh.track(entry.id(), result.getItem());
+                    break;
+                }
+            }
         }
     }
 
@@ -127,7 +111,6 @@ public final class VisibleRecipeCraftability {
         shuttingDown = true;
         invalidateCurrentWork();
         PLANNING_EXECUTOR.shutdownNow();
-        COMPLETED_JOBS.clear();
     }
 
     /**
@@ -138,7 +121,7 @@ public final class VisibleRecipeCraftability {
     }
 
     /**
-     * Revalidates visible state and applies completed worker results on the client thread.
+     * Revalidates visible state and schedules pending work on the client thread.
      */
     public static void tick(Minecraft minecraft) {
         if (shuttingDown) {
@@ -146,7 +129,6 @@ public final class VisibleRecipeCraftability {
         }
 
         revalidateEnvironment(minecraft);
-        applyCompletedJobs();
         dispatchNextJob();
     }
 
@@ -162,6 +144,13 @@ public final class VisibleRecipeCraftability {
         if (inFlightJob != null) {
             inFlightJob.cancel();
         }
+    }
+
+    private static RecipePlanner.PlanningSession captureSession(Environment environment) {
+        return RecipePlanner.createWorkerSession(environment.player, environment.scoringMode)
+                .filter(session -> session.recipeIndexGeneration()
+                        == environment.recipeIndexGeneration)
+                .orElse(null);
     }
 
     private static void revalidateEnvironment(Minecraft minecraft) {
@@ -180,14 +169,7 @@ public final class VisibleRecipeCraftability {
             return;
         }
 
-        InventorySnapshot inventory = InventorySnapshot.from(currentEnvironment.player);
-        RecipePlanner.PlanningSession session = RecipePlanner.createWorkerSession(
-                        inventory,
-                        currentEnvironment.scoringMode
-                )
-                .filter(captured -> captured.recipeIndexGeneration()
-                        == currentEnvironment.recipeIndexGeneration)
-                .orElse(null);
+        RecipePlanner.PlanningSession session = captureSession(currentEnvironment);
         if (session == null) {
             invalidateCurrentWork();
             return;
@@ -195,42 +177,11 @@ public final class VisibleRecipeCraftability {
 
         long generation = ++nextGeneration;
         cancelInFlightJob();
-        activeState = activeState.recalculate(
-                generation,
-                currentEnvironment,
-                session
-        );
-    }
-
-    private static void applyCompletedJobs() {
-        JobResult result;
-        while ((result = COMPLETED_JOBS.poll()) != null) {
-            if (inFlightJob == null || result.jobId != inFlightJob.id) {
-                continue;
-            }
-
-            inFlightJob = null;
-            inFlightTask = null;
-
-            if (result.status == JobStatus.SUCCESS
-                    && activeState.generation == result.generation
-                    && activeState.visibleOutputs.contains(result.output)) {
-                activeState.craftableByOutput.put(result.output, result.craftable);
-            } else if (result.status == JobStatus.FAILED
-                    && activeState.generation == result.generation) {
-                LazyCraft.LOGGER.warn(
-                        "Could not evaluate visible recipe output {}",
-                        result.output,
-                        result.failure
-                );
-            }
-        }
+        activeState = activeState.recalculate(generation, currentEnvironment, session);
     }
 
     private static void dispatchNextJob() {
-        if (shuttingDown
-                || inFlightTask != null
-                || activeState == EMPTY_STATE) {
+        if (shuttingDown || inFlightJob != null || activeState == EMPTY_STATE) {
             return;
         }
 
@@ -240,30 +191,58 @@ public final class VisibleRecipeCraftability {
         }
 
         Job job = new Job(
-                ++nextJobId,
                 activeState.generation,
                 output,
                 activeState.session
         );
-        JobTask task = new JobTask(job);
         inFlightJob = job;
-        inFlightTask = task;
 
         try {
-            PLANNING_EXECUTOR.execute(task);
+            CompletableFuture<Boolean> task = CompletableFuture.supplyAsync(
+                    () -> job.session.plan(job.output, 1, job::isCancelled).isPresent(),
+                    PLANNING_EXECUTOR
+            );
+            task.whenCompleteAsync(
+                    (craftable, failure) -> completeJob(job, craftable, failure),
+                    Minecraft.getInstance()
+            );
         } catch (RejectedExecutionException exception) {
             inFlightJob = null;
-            inFlightTask = null;
             if (!shuttingDown) {
                 LazyCraft.LOGGER.warn("Could not start visible recipe planning", exception);
             }
         }
     }
 
-    private enum JobStatus {
-        SUCCESS,
-        CANCELLED,
-        FAILED
+    private static void completeJob(Job job, Boolean craftable, Throwable failure) {
+        if (inFlightJob != job) {
+            return;
+        }
+
+        inFlightJob = null;
+
+        Throwable cause = unwrapCompletionException(failure);
+        if (cause == null
+                && activeState.generation == job.generation
+                && activeState.visibleOutputs.contains(job.output)) {
+            activeState.craftableByOutput.put(job.output, craftable);
+        } else if (cause != null
+                && !(cause instanceof CancellationException)
+                && activeState.generation == job.generation) {
+            LazyCraft.LOGGER.warn(
+                    "Could not evaluate visible recipe output {}",
+                    job.output,
+                    cause
+            );
+        }
+    }
+
+    private static Throwable unwrapCompletionException(Throwable failure) {
+        Throwable cause = failure;
+        while (cause instanceof CompletionException && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause;
     }
 
     private record Environment(
@@ -309,7 +288,7 @@ public final class VisibleRecipeCraftability {
     private static final class Refresh {
         private final long generation;
         private final Environment environment;
-        private final RecipePlanner.PlanningSession session;
+        private final RecipePlanner.PlanningSession reusableSession;
         private final Map<RecipeDisplayId, Item> outputByRecipe = new HashMap<>();
         private final Map<Item, Boolean> craftableByOutput;
         private final Deque<Item> pendingOutputs = new ArrayDeque<>();
@@ -319,12 +298,12 @@ public final class VisibleRecipeCraftability {
         private Refresh(
                 long generation,
                 Environment environment,
-                RecipePlanner.PlanningSession session,
+                RecipePlanner.PlanningSession reusableSession,
                 Map<Item, Boolean> craftableByOutput
         ) {
             this.generation = generation;
             this.environment = environment;
-            this.session = session;
+            this.reusableSession = reusableSession;
             this.craftableByOutput = craftableByOutput;
         }
 
@@ -342,6 +321,13 @@ public final class VisibleRecipeCraftability {
                 return EMPTY_STATE;
             }
 
+            RecipePlanner.PlanningSession session = reusableSession != null
+                    ? reusableSession
+                    : captureSession(environment);
+            if (session == null) {
+                return EMPTY_STATE;
+            }
+
             return new State(
                     generation,
                     environment,
@@ -354,80 +340,82 @@ public final class VisibleRecipeCraftability {
         }
     }
 
-    private record State(long generation, Environment environment, RecipePlanner.PlanningSession session,
-                         Map<RecipeDisplayId, Item> outputByRecipe, Set<Item> visibleOutputs,
-                         Map<Item, Boolean> craftableByOutput, Deque<Item> pendingOutputs) {
-
+    private record State(
+            long generation,
+            Environment environment,
+            RecipePlanner.PlanningSession session,
+            Map<RecipeDisplayId, Item> outputByRecipe,
+            Set<Item> visibleOutputs,
+            Map<Item, Boolean> craftableByOutput,
+            Deque<Item> pendingOutputs
+    ) {
         private static State empty() {
-                return new State(
-                        0,
-                        null,
-                        null,
-                        Map.of(),
-                        Set.of(),
-                        new HashMap<>(),
-                        new ArrayDeque<>()
-                );
-            }
-
-            private boolean matches(Environment other) {
-                return environment != null && environment.equals(other);
-            }
-
-            private boolean representsSamePage(Environment other) {
-                return environment != null
-                        && environment.player == other.player
-                        && environment.level == other.level
-                        && environment.menu == other.menu
-                        && environment.craftingGrid.equals(other.craftingGrid);
-            }
-
-            private boolean isRecursivelyCraftable(RecipeDisplayId recipe) {
-                Item output = outputByRecipe.get(recipe);
-                return output != null && Boolean.TRUE.equals(craftableByOutput.get(output));
-            }
-
-            private Item nextPendingOutput() {
-                Item output;
-                while ((output = pendingOutputs.pollFirst()) != null) {
-                    if (!craftableByOutput.containsKey(output)) {
-                        return output;
-                    }
-                }
-                return null;
-            }
-
-            private State recalculate(
-                    long generation,
-                    Environment currentEnvironment,
-                    RecipePlanner.PlanningSession session
-            ) {
-                return new State(
-                        generation,
-                        currentEnvironment,
-                        session,
-                        outputByRecipe,
-                        visibleOutputs,
-                        new HashMap<>(),
-                        new ArrayDeque<>(visibleOutputs)
-                );
-            }
+            return new State(
+                    0,
+                    null,
+                    null,
+                    Map.of(),
+                    Set.of(),
+                    new HashMap<>(),
+                    new ArrayDeque<>()
+            );
         }
 
+        private boolean matches(Environment other) {
+            return environment != null && environment.equals(other);
+        }
+
+        private boolean representsSamePage(Environment other) {
+            return environment != null
+                    && environment.player == other.player
+                    && environment.level == other.level
+                    && environment.menu == other.menu
+                    && environment.craftingGrid.equals(other.craftingGrid);
+        }
+
+        private boolean isRecursivelyCraftable(RecipeDisplayId recipe) {
+            Item output = outputByRecipe.get(recipe);
+            return output != null && Boolean.TRUE.equals(craftableByOutput.get(output));
+        }
+
+        private Item nextPendingOutput() {
+            Item output;
+            while ((output = pendingOutputs.pollFirst()) != null) {
+                if (!craftableByOutput.containsKey(output)) {
+                    return output;
+                }
+            }
+            return null;
+        }
+
+        private State recalculate(
+                long generation,
+                Environment currentEnvironment,
+                RecipePlanner.PlanningSession session
+        ) {
+            return new State(
+                    generation,
+                    currentEnvironment,
+                    session,
+                    outputByRecipe,
+                    visibleOutputs,
+                    new HashMap<>(),
+                    new ArrayDeque<>(visibleOutputs)
+            );
+        }
+    }
+
     private static final class Job {
-        private final long id;
         private final long generation;
         private final Item output;
         private final RecipePlanner.PlanningSession session;
         private final AtomicBoolean cancelled = new AtomicBoolean();
 
         private Job(
-                long id,
                 long generation,
                 Item output,
                 RecipePlanner.PlanningSession session
         ) {
-            this.id = id;
             this.generation = generation;
             this.output = output;
             this.session = session;
@@ -441,76 +429,4 @@ public final class VisibleRecipeCraftability {
             return cancelled.get();
         }
     }
-
-    private static final class JobTask extends FutureTask<JobResult> {
-        private final Job job;
-
-        private JobTask(Job job) {
-            super(() -> runJob(job));
-            this.job = job;
-        }
-
-        private static JobResult runJob(Job job) {
-            boolean craftable = job.session.plan(job.output, 1, job::isCancelled)
-                    .filter(plan -> !plan.steps().isEmpty())
-                    .isPresent();
-            return JobResult.success(job, craftable);
-        }
-
-        @Override
-        protected void done() {
-            JobResult result;
-            try {
-                result = get();
-            } catch (CancellationException exception) {
-                result = JobResult.cancelled(job);
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-                result = JobResult.cancelled(job);
-            } catch (ExecutionException exception) {
-                Throwable cause = exception.getCause();
-                result = cause instanceof CancellationException
-                        ? JobResult.cancelled(job)
-                        : JobResult.failed(job, cause);
-            }
-            COMPLETED_JOBS.add(result);
-        }
-    }
-
-    private record JobResult(long jobId, long generation, Item output, JobStatus status, boolean craftable,
-                             Throwable failure) {
-
-        private static JobResult success(Job job, boolean craftable) {
-                return new JobResult(
-                        job.id,
-                        job.generation,
-                        job.output,
-                        JobStatus.SUCCESS,
-                        craftable,
-                        null
-                );
-            }
-
-            private static JobResult cancelled(Job job) {
-                return new JobResult(
-                        job.id,
-                        job.generation,
-                        job.output,
-                        JobStatus.CANCELLED,
-                        false,
-                        null
-                );
-            }
-
-            private static JobResult failed(Job job, Throwable failure) {
-                return new JobResult(
-                        job.id,
-                        job.generation,
-                        job.output,
-                        JobStatus.FAILED,
-                        false,
-                        failure
-                );
-            }
-        }
 }

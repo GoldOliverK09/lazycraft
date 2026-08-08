@@ -15,11 +15,8 @@
 	"icon": "assets/lazycraft/icon.png",
 	"environment": "client",
 	"entrypoints": {
-		"main": [
-			"klumpler.lazycraft.LazyCraft"
-		],
 		"client": [
-			"klumpler.lazycraft.client.LazyCraftClient"
+			"klumpler.lazycraft.LazyCraft"
 		],
 		"modmenu": [
 			"klumpler.lazycraft.client.integration.LazyCraftModMenuIntegration"
