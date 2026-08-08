@@ -5,14 +5,14 @@ import klumpler.lazycraft.client.planner.PlanScorers;
 
 public class LazyCraftConfig {
     static final int MIN_RECURSION_DEPTH = 1;
-    static final int MAX_RECURSION_DEPTH = 32;
+    static final int MAX_RECURSION_DEPTH = 16;
     static final int DEFAULT_RECURSION_DEPTH = 6;
     static final int MIN_CANDIDATES_PER_LAYER = 1;
-    static final int MAX_CANDIDATES_PER_LAYER = 256;
+    static final int MAX_CANDIDATES_PER_LAYER = 128;
     static final int DEFAULT_CANDIDATES_PER_LAYER = 64;
     static final int MIN_SERVER_UPDATE_TIMEOUT_TICKS = 1;
-    static final int MAX_SERVER_UPDATE_TIMEOUT_TICKS = 600;
-    static final int DEFAULT_SERVER_UPDATE_TIMEOUT_TICKS = 40;
+    static final int MAX_SERVER_UPDATE_TIMEOUT_TICKS = 300;
+    static final int DEFAULT_SERVER_UPDATE_TIMEOUT_TICKS = 20;
     static final int MIN_STEP_DELAY_TICKS = 1;
     static final int MAX_STEP_DELAY_TICKS = 20;
     static final int DEFAULT_STEP_DELAY_TICKS = 1;
