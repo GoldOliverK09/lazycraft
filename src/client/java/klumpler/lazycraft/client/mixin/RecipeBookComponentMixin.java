@@ -21,26 +21,22 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
-import org.spongepowered.asm.mixin.gen.Invoker;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(RecipeBookComponent.class)
-public abstract class RecipeBookComponentMixin {
+public class RecipeBookComponentMixin {
     @Shadow
     @Final
     private GhostSlots ghostSlots;
 
-    @Unique
-    private RecipeDisplayId lazycraft$armedGhostRecipe;
+    @Shadow
+    private RecipeDisplayId lastPlacedRecipe;
 
-    @Unique
-    private RecipeCollection lazycraft$armedGhostCollection;
-
-    @Invoker("fillGhostRecipe")
-    protected abstract void lazycraft$restoreGhostRecipe(RecipeDisplay recipe);
+    @Shadow
+    private RecipeCollection lastRecipeCollection;
 
     @Inject(method = "tryPlaceRecipe", at = @At("HEAD"), cancellable = true)
     private void lazycraft$executeGhostRecipePlan(
@@ -57,7 +53,7 @@ public abstract class RecipeBookComponentMixin {
         if (recipeCollection.isCraftable(recipe)) {
             // The first click is handled by vanilla and places the recipe.
             // Further clicks on it use LazyCraft's direct crafting shortcut.
-            if (lazycraft$armRecipeIfNeeded(recipeCollection, recipe)) {
+            if (!recipe.equals(lastPlacedRecipe)) {
                 return;
             }
 
@@ -74,7 +70,7 @@ public abstract class RecipeBookComponentMixin {
 
         // The first click is handled by vanilla and displays the ghost recipe.
         // Further clicks on it confirm LazyCraft's recursive crafting action.
-        if (lazycraft$armRecipeIfNeeded(recipeCollection, recipe)) {
+        if (!recipe.equals(lastPlacedRecipe)) {
             return;
         }
 
@@ -91,8 +87,8 @@ public abstract class RecipeBookComponentMixin {
         if (!config.recipeBookCrafting
                 || !config.recursiveRecipeBookCrafting
                 || CraftingExecutor.isExecuting()
-                || lazycraft$armedGhostRecipe == null
-                || lazycraft$armedGhostCollection == null
+                || lastPlacedRecipe == null
+                || lastRecipeCollection == null
                 || minecraft.player == null
                 || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
                 || slot != menu.getResultSlot()
@@ -100,7 +96,7 @@ public abstract class RecipeBookComponentMixin {
             return;
         }
 
-        if (lazycraft$executePlan(lazycraft$armedGhostCollection, lazycraft$armedGhostRecipe, true)) {
+        if (lazycraft$executePlan(lastRecipeCollection, lastPlacedRecipe, true)) {
             ghostSlots.clear();
             ci.cancel();
         }
@@ -123,12 +119,12 @@ public abstract class RecipeBookComponentMixin {
         }
 
         ContextMap context = SlotDisplayContext.fromLevel(minecraft.level);
-        return entry.resultItems(context).stream()
-                .filter(stack -> !stack.isEmpty())
-                .findFirst()
-                .map(ItemStack::getItem)
-                .flatMap(RecipePlanner::plan)
-                .filter(plan -> !plan.steps().isEmpty())
+        ItemStack result = lazycraft$firstResult(entry, context);
+        if (result.isEmpty()) {
+            return false;
+        }
+
+        return RecipePlanner.plan(result.getItem())
                 .map(plan -> takeResultToCursor
                         ? CraftingExecutor.executeToCursor(plan, () -> lazycraft$restoreGhostRecipe(entry.display()))
                         : CraftingExecutor.execute(plan, () -> lazycraft$restoreGhostRecipe(entry.display())))
@@ -146,24 +142,23 @@ public abstract class RecipeBookComponentMixin {
             return false;
         }
 
-        ContextMap context = SlotDisplayContext.fromLevel(minecraft.level);
         RecipeDisplayEntry entry = lazycraft$findRecipeEntry(recipeCollection, recipe);
         if (entry == null) {
             return false;
         }
 
-        return entry.resultItems(context).stream()
-                .filter(stack -> !stack.isEmpty())
-                .findFirst()
-                .map(stack -> new CraftingStep(entry, stack.getItem(), 1))
-                .map(step -> {
-                    Runnable restoreRecipe = () -> lazycraft$restoreVanillaRecipe(recipe);
-                    if (!useMaxItems && CraftingExecutor.executePlaced(step, restoreRecipe)) {
-                        return true;
-                    }
-                    return CraftingExecutor.execute(step, useMaxItems, restoreRecipe);
-                })
-                .orElse(false);
+        ContextMap context = SlotDisplayContext.fromLevel(minecraft.level);
+        ItemStack result = lazycraft$firstResult(entry, context);
+        if (result.isEmpty()) {
+            return false;
+        }
+
+        CraftingStep step = new CraftingStep(entry, result.getItem(), 1);
+        Runnable restoreRecipe = () -> lazycraft$restoreVanillaRecipe(recipe);
+        if (!useMaxItems && CraftingExecutor.executePlaced(step, restoreRecipe)) {
+            return true;
+        }
+        return CraftingExecutor.execute(step, useMaxItems, restoreRecipe);
     }
 
     @Unique
@@ -180,17 +175,8 @@ public abstract class RecipeBookComponentMixin {
     }
 
     @Unique
-    private boolean lazycraft$armRecipeIfNeeded(
-            RecipeCollection recipeCollection,
-            RecipeDisplayId recipe
-    ) {
-        if (recipe.equals(lazycraft$armedGhostRecipe)) {
-            return false;
-        }
-
-        lazycraft$armedGhostRecipe = recipe;
-        lazycraft$armedGhostCollection = recipeCollection;
-        return true;
+    private void lazycraft$restoreGhostRecipe(RecipeDisplay recipe) {
+        ((RecipeBookComponent) (Object) this).fillGhostRecipe(recipe);
     }
 
     @Unique
@@ -198,9 +184,21 @@ public abstract class RecipeBookComponentMixin {
             RecipeCollection recipeCollection,
             RecipeDisplayId recipe
     ) {
-        return recipeCollection.getRecipes().stream()
-                .filter(entry -> entry.id().equals(recipe))
-                .findFirst()
-                .orElse(null);
+        for (RecipeDisplayEntry entry : recipeCollection.getRecipes()) {
+            if (entry.id().equals(recipe)) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    @Unique
+    private ItemStack lazycraft$firstResult(RecipeDisplayEntry entry, ContextMap context) {
+        for (ItemStack result : entry.resultItems(context)) {
+            if (!result.isEmpty()) {
+                return result;
+            }
+        }
+        return ItemStack.EMPTY;
     }
 }

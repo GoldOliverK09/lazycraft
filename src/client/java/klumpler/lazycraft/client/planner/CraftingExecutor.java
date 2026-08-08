@@ -26,14 +26,6 @@ public final class CraftingExecutor {
     }
 
     /**
-     * Executes one selected recipe, optionally asking vanilla to fill the grid
-     * with the maximum number of ingredient sets available.
-     */
-    public static boolean execute(CraftingStep step, boolean useMaxItems) {
-        return execute(step, useMaxItems, null);
-    }
-
-    /**
      * Executes one selected recipe and runs {@code onComplete} after it succeeds.
      */
     public static boolean execute(CraftingStep step, boolean useMaxItems, Runnable onComplete) {
@@ -42,13 +34,6 @@ public final class CraftingExecutor {
                 List.of(new QueuedCraft(step, false, useMaxItems, false)),
                 onComplete
         );
-    }
-
-    /**
-     * Takes a recipe result that vanilla has already placed in the crafting grid.
-     */
-    public static boolean executePlaced(CraftingStep step) {
-        return executePlaced(step, null);
     }
 
     /**
@@ -71,25 +56,10 @@ public final class CraftingExecutor {
     }
 
     /**
-     * Executes every step in a planner result, including its final requested recipe.
-     */
-    public static boolean execute(CraftPlan plan) {
-        return execute(plan, null);
-    }
-
-    /**
      * Executes a plan and runs {@code onComplete} after its final craft succeeds.
      */
     public static boolean execute(CraftPlan plan, Runnable onComplete) {
         return executePlan(plan, onComplete, false);
-    }
-
-    /**
-     * Executes a plan and leaves its final crafted result on the player's cursor.
-     * Dependency results still use quick-move so later recipes can use them.
-     */
-    public static boolean executeToCursor(CraftPlan plan) {
-        return executeToCursor(plan, null);
     }
 
     /**

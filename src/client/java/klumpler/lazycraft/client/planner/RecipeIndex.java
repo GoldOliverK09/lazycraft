@@ -16,7 +16,6 @@ import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 import java.util.*;
 
 public final class RecipeIndex {
-    private static volatile Map<Item, List<RecipeDisplayEntry>> recipesByOutput = Map.of();
     private static volatile Snapshot resolvedSnapshot = Snapshot.empty();
     private static long nextGeneration;
 
@@ -28,13 +27,11 @@ public final class RecipeIndex {
         var level = Minecraft.getInstance().level;
 
         if (level == null) {
-            recipesByOutput = Map.of();
             resolvedSnapshot = new Snapshot(++nextGeneration, Map.of());
             return;
         }
 
         ContextMap context = SlotDisplayContext.fromLevel(level);
-        Map<Item, List<RecipeDisplayEntry>> rebuiltIndex = new HashMap<>();
         Map<Item, List<ResolvedRecipe>> rebuiltResolvedIndex = new HashMap<>();
         int indexedResultCount = 0;
 
@@ -44,29 +41,25 @@ public final class RecipeIndex {
                 ResolvedRecipe resolvedRecipe = ResolvedRecipe.resolve(entry, resultItems, context);
 
                 for (ItemStack output : resultItems) {
-                    rebuiltIndex.computeIfAbsent(output.getItem(), ignored -> new ArrayList<>()).add(entry);
-                    if (!output.isEmpty()) {
-                        rebuiltResolvedIndex
-                                .computeIfAbsent(output.getItem(), ignored -> new ArrayList<>())
-                                .add(resolvedRecipe);
+                    if (output.isEmpty()) {
+                        continue;
                     }
+
+                    rebuiltResolvedIndex
+                            .computeIfAbsent(output.getItem(), ignored -> new ArrayList<>())
+                            .add(resolvedRecipe);
                     indexedResultCount++;
                 }
             }
         }
 
-        recipesByOutput = rebuiltIndex;
         resolvedSnapshot = new Snapshot(++nextGeneration, freezeIndex(rebuiltResolvedIndex));
         LazyCraft.LOGGER.info(
                 "Recipe lookup took {} ms for {} recipes ({} unique outputs)",
                 (System.nanoTime() - startNanos) / 1_000_000.0,
                 indexedResultCount,
-                recipesByOutput.size()
+                rebuiltResolvedIndex.size()
         );
-    }
-
-    public static List<RecipeDisplayEntry> recipesProducing(Item item) {
-        return recipesByOutput.getOrDefault(item, List.of());
     }
 
     static Snapshot snapshot() {
@@ -113,7 +106,7 @@ public final class RecipeIndex {
 
     static final class ResolvedRecipe {
         private final RecipeDisplayEntry entry;
-        private final Optional<List<List<Item>>> requirements;
+        private final Optional<List<Set<Item>>> requirements;
         private final List<ResolvedOutput> outputs;
         private final boolean usesCraftingTable;
         private final Layout layout;
@@ -122,7 +115,7 @@ public final class RecipeIndex {
 
         private ResolvedRecipe(
                 RecipeDisplayEntry entry,
-                Optional<List<List<Item>>> requirements,
+                Optional<List<Set<Item>>> requirements,
                 List<ResolvedOutput> outputs,
                 boolean usesCraftingTable,
                 Layout layout,
@@ -143,18 +136,21 @@ public final class RecipeIndex {
                 List<ItemStack> resultItems,
                 ContextMap context
         ) {
-            Optional<List<List<Item>>> requirements = entry.craftingRequirements()
-                    .map(ingredients -> ingredients.stream()
-                            .map(ingredient -> resolveIngredient(ingredient, context))
-                            .toList());
-            List<ResolvedOutput> outputs = resultItems.stream()
-                    .filter(stack -> !stack.isEmpty())
-                    .map(stack -> new ResolvedOutput(stack.getItem(), stack.getCount()))
-                    .toList();
-            boolean usesCraftingTable = entry.display().craftingStation()
-                    .resolveForStacks(context)
-                    .stream()
-                    .anyMatch(stack -> stack.is(Items.CRAFTING_TABLE));
+            Optional<List<Set<Item>>> requirements = resolveRequirements(entry);
+            List<ResolvedOutput> outputs = new ArrayList<>(resultItems.size());
+            for (ItemStack stack : resultItems) {
+                if (!stack.isEmpty()) {
+                    outputs.add(new ResolvedOutput(stack.getItem(), stack.getCount()));
+                }
+            }
+
+            boolean usesCraftingTable = false;
+            for (ItemStack station : entry.display().craftingStation().resolveForStacks(context)) {
+                if (station.is(Items.CRAFTING_TABLE)) {
+                    usesCraftingTable = true;
+                    break;
+                }
+            }
 
             Layout layout = Layout.OTHER;
             int layoutWidth = 0;
@@ -171,7 +167,7 @@ public final class RecipeIndex {
             return new ResolvedRecipe(
                     entry,
                     requirements,
-                    outputs,
+                    List.copyOf(outputs),
                     usesCraftingTable,
                     layout,
                     layoutWidth,
@@ -179,21 +175,39 @@ public final class RecipeIndex {
             );
         }
 
-        private static List<Item> resolveIngredient(Ingredient ingredient, ContextMap context) {
-            Set<Item> acceptedItems = new LinkedHashSet<>();
-            for (ItemStack stack : ingredient.display().resolveForStacks(context)) {
-                if (!stack.isEmpty()) {
-                    acceptedItems.add(stack.getItem());
-                }
+        private static Optional<List<Set<Item>>> resolveRequirements(
+                RecipeDisplayEntry entry
+        ) {
+            Optional<List<Ingredient>> ingredients = entry.craftingRequirements();
+            if (ingredients.isEmpty()) {
+                return Optional.empty();
             }
-            return List.copyOf(acceptedItems);
+
+            List<Ingredient> recipeIngredients = ingredients.get();
+            List<Set<Item>> requirements = new ArrayList<>(recipeIngredients.size());
+            for (Ingredient ingredient : recipeIngredients) {
+                requirements.add(resolveIngredient(ingredient));
+            }
+            return Optional.of(List.copyOf(requirements));
+        }
+
+        @SuppressWarnings("deprecation") // 26.1 exposes its authoritative holder set here.
+        private static Set<Item> resolveIngredient(Ingredient ingredient) {
+            Set<Item> acceptedItems = new LinkedHashSet<>();
+            ingredient.items().forEach(holder -> {
+                Item item = holder.value();
+                if (item != Items.AIR) {
+                    acceptedItems.add(item);
+                }
+            });
+            return Collections.unmodifiableSet(acceptedItems);
         }
 
         RecipeDisplayEntry entry() {
             return entry;
         }
 
-        Optional<List<List<Item>>> requirements() {
+        Optional<List<Set<Item>>> requirements() {
             return requirements;
         }
 
@@ -211,10 +225,13 @@ public final class RecipeIndex {
         }
 
         int outputCount(Item item) {
-            return outputs.stream()
-                    .filter(output -> output.item == item)
-                    .mapToInt(ResolvedOutput::count)
-                    .sum();
+            int count = 0;
+            for (ResolvedOutput output : outputs) {
+                if (output.item == item) {
+                    count += output.count;
+                }
+            }
+            return count;
         }
 
         void addOutputs(PlanningInventory inventory, int crafts) {

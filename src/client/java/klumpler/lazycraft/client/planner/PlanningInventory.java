@@ -1,11 +1,14 @@
 package klumpler.lazycraft.client.planner;
 
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.*;
 
 /**
  * Detached item/count inventory used by the pure planning search.
+ * Entries stay in player-slot order because alternative ingredients are consumed in that order.
  */
 final class PlanningInventory {
     private final List<StackAmount> stacks;
@@ -14,10 +17,15 @@ final class PlanningInventory {
         this.stacks = stacks;
     }
 
-    static PlanningInventory from(InventorySnapshot snapshot) {
-        List<StackAmount> stacks = new ArrayList<>();
-        for (InventorySnapshot.ItemAmount amount : snapshot.itemAmounts()) {
-            stacks.add(new StackAmount(amount.item(), amount.count()));
+    static PlanningInventory from(Player player) {
+        Objects.requireNonNull(player, "player cannot be null");
+        int inventorySize = player.getInventory().getContainerSize();
+        List<StackAmount> stacks = new ArrayList<>(inventorySize);
+        for (int slot = 0; slot < inventorySize; slot++) {
+            ItemStack stack = player.getInventory().getItem(slot);
+            if (!stack.isEmpty()) {
+                stacks.add(new StackAmount(stack.getItem(), stack.getCount()));
+            }
         }
         return new PlanningInventory(stacks);
     }
@@ -32,18 +40,24 @@ final class PlanningInventory {
 
     int availableItems(Collection<Item> acceptedItems) {
         Objects.requireNonNull(acceptedItems, "acceptedItems cannot be null");
-        return stacks.stream()
-                .filter(stack -> acceptedItems.contains(stack.item))
-                .mapToInt(stack -> stack.count)
-                .sum();
+        int available = 0;
+        for (StackAmount stack : stacks) {
+            if (acceptedItems.contains(stack.item)) {
+                available += stack.count;
+            }
+        }
+        return available;
     }
 
     int getAmount(Item item) {
         Objects.requireNonNull(item, "item cannot be null");
-        return stacks.stream()
-                .filter(stack -> stack.item == item)
-                .mapToInt(stack -> stack.count)
-                .sum();
+        int amount = 0;
+        for (StackAmount stack : stacks) {
+            if (stack.item == item) {
+                amount += stack.count;
+            }
+        }
+        return amount;
     }
 
     void add(Item item, int count) {
