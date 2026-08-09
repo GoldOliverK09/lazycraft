@@ -6,9 +6,11 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.Locale;
+import java.util.Optional;
 
 public final class LazyCraftConfigScreen {
     private static final String OPTION_KEY_PREFIX = "text.autoconfig.lazycraft.option.";
+    private static final String SCORING_MODE_KEY_PREFIX = "text.lazycraft.scoring_mode.";
 
     private LazyCraftConfigScreen() {
     }
@@ -73,9 +75,8 @@ public final class LazyCraftConfigScreen {
                         LazyCraftConfig.ScoringMode.class,
                         config.scoringMode)
                 .setDefaultValue(LazyCraftConfig.ScoringMode.LEAST_TOTAL_INGREDIENTS)
-                .setEnumNameProvider(mode -> Component.translatable(
-                        "text.lazycraft.scoring_mode." + mode.name().toLowerCase(Locale.ROOT)))
-                .setTooltip(optionTooltip("scoringMode"))
+                .setEnumNameProvider(LazyCraftConfigScreen::scoringModeLabel)
+                .setTooltipSupplier(LazyCraftConfigScreen::scoringModeTooltip)
                 .setSaveConsumer(value -> config.scoringMode = value)
                 .build());
 
@@ -110,5 +111,23 @@ public final class LazyCraftConfigScreen {
 
     private static Component optionTooltip(String option) {
         return Component.translatable(OPTION_KEY_PREFIX + option + ".@Tooltip");
+    }
+
+    private static Component scoringModeLabel(Enum<?> mode) {
+        return Component.translatable(scoringModeKey(mode));
+    }
+
+    private static Optional<Component[]> scoringModeTooltip(
+            LazyCraftConfig.ScoringMode mode
+    ) {
+        String key = scoringModeKey(mode);
+        return Optional.of(new Component[]{
+                Component.translatable(key + ".tooltip.primary"),
+                Component.translatable(key + ".tooltip.tie_breakers")
+        });
+    }
+
+    private static String scoringModeKey(Enum<?> mode) {
+        return SCORING_MODE_KEY_PREFIX + mode.name().toLowerCase(Locale.ROOT);
     }
 }
