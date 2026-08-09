@@ -47,6 +47,17 @@ public final class LazyCraftConfigScreen {
                 .setSaveConsumer(value -> config.recursiveRecipeBookCrafting = value)
                 .build());
 
+        recipeBookCategory.addEntry(builder.entryBuilder()
+                .startIntSlider(
+                        optionLabel("backgroundRecipeCheckDelayTicks"),
+                        config.backgroundRecipeCheckDelayTicks,
+                        LazyCraftConfig.MIN_BACKGROUND_RECIPE_CHECK_DELAY_TICKS,
+                        LazyCraftConfig.MAX_BACKGROUND_RECIPE_CHECK_DELAY_TICKS)
+                .setDefaultValue(LazyCraftConfig.DEFAULT_BACKGROUND_RECIPE_CHECK_DELAY_TICKS)
+                .setTooltip(optionTooltip("backgroundRecipeCheckDelayTicks"))
+                .setSaveConsumer(value -> config.backgroundRecipeCheckDelayTicks = value)
+                .build());
+
         recursiveCraftingCategory.addEntry(builder.entryBuilder()
                 .startIntSlider(
                         optionLabel("recursionDepth"),

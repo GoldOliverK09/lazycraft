@@ -22,14 +22,14 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Evaluates only recipes represented by the buttons on the current recipe-book page.
- * Minecraft-dependent inputs are captured on the client thread; the detached planning
- * search runs on one cancellable daemon worker.
+ * Evaluates the current recipe-book page first, then warms the remaining recipe-book
+ * outputs in the background. Minecraft-dependent inputs are captured on the client
+ * thread; the detached planning search runs on one cancellable daemon worker.
  */
 public final class VisibleRecipeCraftability {
     private static final ExecutorService PLANNING_EXECUTOR =
             Executors.newSingleThreadExecutor(task -> {
-                Thread thread = new Thread(task, "LazyCraft visible-recipe planner");
+                Thread thread = new Thread(task, "LazyCraft recipe-book planner");
                 thread.setDaemon(true);
                 thread.setPriority(Math.max(Thread.MIN_PRIORITY, Thread.NORM_PRIORITY - 1));
                 return thread;
@@ -40,6 +40,7 @@ public final class VisibleRecipeCraftability {
     private static State activeState = EMPTY_STATE;
     private static Refresh refresh;
     private static Job inFlightJob;
+    private static int backgroundCooldownTicks;
     private static boolean shuttingDown;
 
     private VisibleRecipeCraftability() {
@@ -127,7 +128,7 @@ public final class VisibleRecipeCraftability {
     }
 
     /**
-     * Revalidates visible state and schedules pending work on the client thread.
+     * Revalidates cached state and schedules pending work on the client thread.
      */
     public static void tick(Minecraft minecraft) {
         if (shuttingDown) {
@@ -136,12 +137,16 @@ public final class VisibleRecipeCraftability {
 
         revalidateEnvironment(minecraft);
         dispatchNextJob();
+        if (inFlightJob == null && backgroundCooldownTicks > 0) {
+            backgroundCooldownTicks--;
+        }
     }
 
     private static long invalidateCurrentWork() {
         long generation = ++nextGeneration;
         refresh = null;
         activeState = EMPTY_STATE;
+        backgroundCooldownTicks = 0;
         cancelInFlightJob();
         return generation;
     }
@@ -183,6 +188,7 @@ public final class VisibleRecipeCraftability {
 
         long generation = ++nextGeneration;
         cancelInFlightJob();
+        backgroundCooldownTicks = 0;
         activeState = activeState.recalculate(generation, currentEnvironment, session);
     }
 
@@ -191,7 +197,7 @@ public final class VisibleRecipeCraftability {
             return;
         }
 
-        Item output = activeState.nextPendingOutput();
+        Item output = activeState.nextPendingOutput(backgroundCooldownTicks == 0);
         if (output == null) {
             return;
         }
@@ -199,7 +205,8 @@ public final class VisibleRecipeCraftability {
         Job job = new Job(
                 activeState.generation,
                 output,
-                activeState.session
+                activeState.session,
+                activeState.visibleOutputs.contains(output)
         );
         inFlightJob = job;
 
@@ -215,7 +222,7 @@ public final class VisibleRecipeCraftability {
         } catch (RejectedExecutionException exception) {
             inFlightJob = null;
             if (!shuttingDown) {
-                LazyCraft.LOGGER.warn("Could not start visible recipe planning", exception);
+                LazyCraft.LOGGER.warn("Could not start recipe-book planning", exception);
             }
         }
     }
@@ -228,19 +235,26 @@ public final class VisibleRecipeCraftability {
         inFlightJob = null;
 
         Throwable cause = unwrapCompletionException(failure);
-        if (cause == null
-                && activeState.generation == job.generation
-                && activeState.visibleOutputs.contains(job.output)) {
+        boolean currentGeneration = activeState.generation == job.generation;
+        if (cause == null && currentGeneration) {
             activeState.craftableByOutput.put(job.output, craftable);
         } else if (cause != null
                 && !(cause instanceof CancellationException)
-                && activeState.generation == job.generation) {
+                && currentGeneration) {
             LazyCraft.LOGGER.warn(
-                    "Could not evaluate visible recipe output {}",
+                    "Could not evaluate recipe-book output {}",
                     job.output,
                     cause
             );
         }
+
+        if (currentGeneration
+                && !job.visible
+                && !(cause instanceof CancellationException)) {
+            backgroundCooldownTicks = LazyCraftConfigManager.get()
+                    .backgroundRecipeCheckDelayTicks;
+        }
+        dispatchNextJob();
     }
 
     private static Throwable unwrapCompletionException(Throwable failure) {
@@ -249,6 +263,25 @@ public final class VisibleRecipeCraftability {
             cause = cause.getCause();
         }
         return cause;
+    }
+
+    private static Deque<Item> createPendingOutputs(
+            Set<Item> visibleOutputs,
+            Map<Item, Boolean> craftableByOutput
+    ) {
+        Deque<Item> pendingOutputs = new ArrayDeque<>();
+        for (Item output : visibleOutputs) {
+            if (!craftableByOutput.containsKey(output)) {
+                pendingOutputs.addLast(output);
+            }
+        }
+        for (Item output : RecipeIndex.primaryOutputs()) {
+            if (!visibleOutputs.contains(output)
+                    && !craftableByOutput.containsKey(output)) {
+                pendingOutputs.addLast(output);
+            }
+        }
+        return pendingOutputs;
     }
 
     private record Environment(
@@ -298,7 +331,6 @@ public final class VisibleRecipeCraftability {
         private final RecipePlanner.PlanningSession reusableSession;
         private final Map<RecipeDisplayId, Item> outputByRecipe = new HashMap<>();
         private final Map<Item, Boolean> craftableByOutput;
-        private final Deque<Item> pendingOutputs = new ArrayDeque<>();
         private final Set<Item> visibleOutputs = new LinkedHashSet<>();
 
         private Refresh(
@@ -315,16 +347,10 @@ public final class VisibleRecipeCraftability {
 
         private void track(RecipeDisplayId recipe, Item output) {
             outputByRecipe.put(recipe, output);
-            if (visibleOutputs.add(output) && !craftableByOutput.containsKey(output)) {
-                pendingOutputs.addLast(output);
-            }
+            visibleOutputs.add(output);
         }
 
         private State finish() {
-            if (outputByRecipe.isEmpty()) {
-                return EMPTY_STATE;
-            }
-
             RecipePlanner.PlanningSession session = reusableSession != null
                     ? reusableSession
                     : captureSession(environment);
@@ -339,7 +365,7 @@ public final class VisibleRecipeCraftability {
                     Map.copyOf(outputByRecipe),
                     Collections.unmodifiableSet(new LinkedHashSet<>(visibleOutputs)),
                     craftableByOutput,
-                    pendingOutputs
+                    createPendingOutputs(visibleOutputs, craftableByOutput)
             );
         }
     }
@@ -383,12 +409,17 @@ public final class VisibleRecipeCraftability {
             return output != null && Boolean.TRUE.equals(craftableByOutput.get(output));
         }
 
-        private Item nextPendingOutput() {
-            Item output;
-            while ((output = pendingOutputs.pollFirst()) != null) {
-                if (!craftableByOutput.containsKey(output)) {
-                    return output;
+        private Item nextPendingOutput(boolean allowBackground) {
+            while (!pendingOutputs.isEmpty()) {
+                Item output = pendingOutputs.peekFirst();
+                if (craftableByOutput.containsKey(output)) {
+                    pendingOutputs.removeFirst();
+                    continue;
                 }
+                if (!allowBackground && !visibleOutputs.contains(output)) {
+                    return null;
+                }
+                return pendingOutputs.removeFirst();
             }
             return null;
         }
@@ -405,7 +436,7 @@ public final class VisibleRecipeCraftability {
                     outputByRecipe,
                     visibleOutputs,
                     new HashMap<>(),
-                    new ArrayDeque<>(visibleOutputs)
+                    createPendingOutputs(visibleOutputs, Map.of())
             );
         }
     }
@@ -414,16 +445,19 @@ public final class VisibleRecipeCraftability {
         private final long generation;
         private final Item output;
         private final RecipePlanner.PlanningSession session;
+        private final boolean visible;
         private final AtomicBoolean cancelled = new AtomicBoolean();
 
         private Job(
                 long generation,
                 Item output,
-                RecipePlanner.PlanningSession session
+                RecipePlanner.PlanningSession session,
+                boolean visible
         ) {
             this.generation = generation;
             this.output = output;
             this.session = session;
+            this.visible = visible;
         }
 
         private void cancel() {

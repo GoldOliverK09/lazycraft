@@ -9,6 +9,8 @@
   "text.autoconfig.lazycraft.option.recipeBookCrafting.@Tooltip": "Enables LazyCraft's additional recipe-book click actions.",
   "text.autoconfig.lazycraft.option.recursiveRecipeBookCrafting": "Enable recursive recipe book crafting",
   "text.autoconfig.lazycraft.option.recursiveRecipeBookCrafting.@Tooltip": "Allows ghost recipes to craft their missing crafting-table dependencies.",
+  "text.autoconfig.lazycraft.option.backgroundRecipeCheckDelayTicks": "Background check delay (ticks)",
+  "text.autoconfig.lazycraft.option.backgroundRecipeCheckDelayTicks.@Tooltip": "Additional delay after each non-visible recipe check. The first background check is immediate, and visible recipes are always prioritized. Higher values reduce sustained background CPU usage; 20 ticks is normally one second.",
   "text.autoconfig.lazycraft.option.recursionDepth": "Maximum recursion depth",
   "text.autoconfig.lazycraft.option.recursionDepth.@Tooltip": "Maximum number of dependency levels searched for recursive crafting plans.",
   "text.autoconfig.lazycraft.option.maxCandidatesPerLayer": "Search breadth",

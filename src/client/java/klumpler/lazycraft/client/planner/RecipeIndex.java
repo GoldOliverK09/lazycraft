@@ -24,13 +24,14 @@ public final class RecipeIndex {
         var level = Minecraft.getInstance().level;
 
         if (level == null) {
-            resolvedSnapshot = new Snapshot(++nextGeneration, Map.of(), Map.of());
+            resolvedSnapshot = new Snapshot(++nextGeneration, Map.of(), Map.of(), List.of());
             return;
         }
 
         ContextMap context = SlotDisplayContext.fromLevel(level);
         Map<Item, List<ResolvedRecipe>> rebuiltResolvedIndex = new HashMap<>();
         Map<RecipeDisplayId, Item> rebuiltPrimaryOutputs = new HashMap<>();
+        Set<Item> rebuiltOutputOrder = new LinkedHashSet<>();
         int indexedResultCount = 0;
 
         for (RecipeCollection collection : collections) {
@@ -43,7 +44,9 @@ public final class RecipeIndex {
                         continue;
                     }
 
-                    rebuiltPrimaryOutputs.putIfAbsent(entry.id(), output.getItem());
+                    if (rebuiltPrimaryOutputs.putIfAbsent(entry.id(), output.getItem()) == null) {
+                        rebuiltOutputOrder.add(output.getItem());
+                    }
                     rebuiltResolvedIndex
                             .computeIfAbsent(output.getItem(), ignored -> new ArrayList<>())
                             .add(resolvedRecipe);
@@ -55,7 +58,8 @@ public final class RecipeIndex {
         resolvedSnapshot = new Snapshot(
                 ++nextGeneration,
                 freezeIndex(rebuiltResolvedIndex),
-                Map.copyOf(rebuiltPrimaryOutputs)
+                Map.copyOf(rebuiltPrimaryOutputs),
+                List.copyOf(rebuiltOutputOrder)
         );
         LazyCraft.LOGGER.info(
                 "Recipe lookup took {} ms for {} recipes ({} unique outputs)",
@@ -82,6 +86,13 @@ public final class RecipeIndex {
         return resolvedSnapshot.primaryOutputs.get(recipe);
     }
 
+    /**
+     * Returns each unique primary recipe-book output in recipe-book order.
+     */
+    public static List<Item> primaryOutputs() {
+        return resolvedSnapshot.primaryOutputItems;
+    }
+
     private static <T> Map<Item, List<T>> freezeIndex(Map<Item, List<T>> index) {
         Map<Item, List<T>> frozen = new HashMap<>(index.size());
         index.forEach((item, recipes) -> frozen.put(item, List.copyOf(recipes)));
@@ -98,19 +109,22 @@ public final class RecipeIndex {
         private final long generation;
         private final Map<Item, List<ResolvedRecipe>> recipesByOutput;
         private final Map<RecipeDisplayId, Item> primaryOutputs;
+        private final List<Item> primaryOutputItems;
 
         private Snapshot(
                 long generation,
                 Map<Item, List<ResolvedRecipe>> recipesByOutput,
-                Map<RecipeDisplayId, Item> primaryOutputs
+                Map<RecipeDisplayId, Item> primaryOutputs,
+                List<Item> primaryOutputItems
         ) {
             this.generation = generation;
             this.recipesByOutput = recipesByOutput;
             this.primaryOutputs = primaryOutputs;
+            this.primaryOutputItems = primaryOutputItems;
         }
 
         private static Snapshot empty() {
-            return new Snapshot(0, Map.of(), Map.of());
+            return new Snapshot(0, Map.of(), Map.of(), List.of());
         }
 
         long generation() {
