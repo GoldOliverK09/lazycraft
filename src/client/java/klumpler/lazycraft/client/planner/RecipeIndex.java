@@ -8,10 +8,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.Ingredient;
-import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
-import net.minecraft.world.item.crafting.display.ShapedCraftingRecipeDisplay;
-import net.minecraft.world.item.crafting.display.ShapelessCraftingRecipeDisplay;
-import net.minecraft.world.item.crafting.display.SlotDisplayContext;
+import net.minecraft.world.item.crafting.display.*;
 
 import java.util.*;
 
@@ -27,12 +24,13 @@ public final class RecipeIndex {
         var level = Minecraft.getInstance().level;
 
         if (level == null) {
-            resolvedSnapshot = new Snapshot(++nextGeneration, Map.of());
+            resolvedSnapshot = new Snapshot(++nextGeneration, Map.of(), Map.of());
             return;
         }
 
         ContextMap context = SlotDisplayContext.fromLevel(level);
         Map<Item, List<ResolvedRecipe>> rebuiltResolvedIndex = new HashMap<>();
+        Map<RecipeDisplayId, Item> rebuiltPrimaryOutputs = new HashMap<>();
         int indexedResultCount = 0;
 
         for (RecipeCollection collection : collections) {
@@ -45,6 +43,7 @@ public final class RecipeIndex {
                         continue;
                     }
 
+                    rebuiltPrimaryOutputs.putIfAbsent(entry.id(), output.getItem());
                     rebuiltResolvedIndex
                             .computeIfAbsent(output.getItem(), ignored -> new ArrayList<>())
                             .add(resolvedRecipe);
@@ -53,7 +52,11 @@ public final class RecipeIndex {
             }
         }
 
-        resolvedSnapshot = new Snapshot(++nextGeneration, freezeIndex(rebuiltResolvedIndex));
+        resolvedSnapshot = new Snapshot(
+                ++nextGeneration,
+                freezeIndex(rebuiltResolvedIndex),
+                Map.copyOf(rebuiltPrimaryOutputs)
+        );
         LazyCraft.LOGGER.info(
                 "Recipe lookup took {} ms for {} recipes ({} unique outputs)",
                 (System.nanoTime() - startNanos) / 1_000_000.0,
@@ -68,6 +71,15 @@ public final class RecipeIndex {
 
     public static long generation() {
         return resolvedSnapshot.generation;
+    }
+
+    /**
+     * Returns the first non-empty result item resolved while building the current index,
+     * or {@code null} when the entry is not present in that index.
+     */
+    public static Item primaryOutputOrNull(RecipeDisplayId recipe) {
+        Objects.requireNonNull(recipe, "recipe cannot be null");
+        return resolvedSnapshot.primaryOutputs.get(recipe);
     }
 
     private static <T> Map<Item, List<T>> freezeIndex(Map<Item, List<T>> index) {
@@ -85,14 +97,20 @@ public final class RecipeIndex {
     static final class Snapshot {
         private final long generation;
         private final Map<Item, List<ResolvedRecipe>> recipesByOutput;
+        private final Map<RecipeDisplayId, Item> primaryOutputs;
 
-        private Snapshot(long generation, Map<Item, List<ResolvedRecipe>> recipesByOutput) {
+        private Snapshot(
+                long generation,
+                Map<Item, List<ResolvedRecipe>> recipesByOutput,
+                Map<RecipeDisplayId, Item> primaryOutputs
+        ) {
             this.generation = generation;
             this.recipesByOutput = recipesByOutput;
+            this.primaryOutputs = primaryOutputs;
         }
 
         private static Snapshot empty() {
-            return new Snapshot(0, Map.of());
+            return new Snapshot(0, Map.of(), Map.of());
         }
 
         long generation() {
@@ -101,6 +119,10 @@ public final class RecipeIndex {
 
         List<ResolvedRecipe> recipesProducing(Item item) {
             return recipesByOutput.getOrDefault(item, List.of());
+        }
+
+        boolean hasRecipes(Item item) {
+            return recipesByOutput.containsKey(item);
         }
     }
 

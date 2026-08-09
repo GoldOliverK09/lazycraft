@@ -23,5 +23,10 @@
   "text.lazycraft.config.cloth_missing.message": "Install a compatible version of Cloth Config API to edit LazyCraft settings in-game. You can also edit config/lazycraft.json manually.",
   "text.lazycraft.scoring_mode.least_total_ingredients": "Least total ingredients",
   "text.lazycraft.scoring_mode.fewest_steps": "Fewest crafting steps",
-  "text.lazycraft.scoring_mode.fewest_recipe_executions": "Fewest recipe executions"
+  "text.lazycraft.scoring_mode.fewest_recipe_executions": "Fewest recipe executions",
+  "text.lazycraft.scoring_mode.fastest_execution": "Fewest executions, then steps",
+  "text.lazycraft.scoring_mode.inventory_first": "Use inventory first",
+  "text.lazycraft.scoring_mode.shallowest_chain": "Shallowest dependency chain",
+  "text.lazycraft.scoring_mode.least_base_inputs": "Fewest starting inventory items",
+  "text.lazycraft.scoring_mode.least_overproduction": "Least batch surplus"
 }

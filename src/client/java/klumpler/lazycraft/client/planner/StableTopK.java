@@ -28,6 +28,10 @@ final class StableTopK<T> {
         if (limit == 0) {
             return;
         }
+        if (values.size() == limit
+                && comparator.compare(value, values.getLast()) >= 0) {
+            return;
+        }
 
         int low = 0;
         int high = values.size();
@@ -50,7 +54,10 @@ final class StableTopK<T> {
         }
     }
 
-    List<T> toList() {
-        return List.copyOf(values);
+    /**
+     * Transfers the ordered values to the caller. This container must not be used afterward.
+     */
+    List<T> takeValues() {
+        return values;
     }
 }

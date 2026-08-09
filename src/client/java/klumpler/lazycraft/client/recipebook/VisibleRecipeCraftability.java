@@ -62,7 +62,7 @@ public final class VisibleRecipeCraftability {
                 environment,
                 canReuseState ? previousState.session : null,
                 canReuseState
-                        ? new HashMap<>(previousState.craftableByOutput)
+                        ? previousState.craftableByOutput
                         : new HashMap<>()
         );
     }
@@ -77,6 +77,12 @@ public final class VisibleRecipeCraftability {
 
         for (RecipeDisplayEntry entry
                 : collection.getSelectedRecipes(RecipeCollection.CraftableStatus.ANY)) {
+            Item indexedOutput = RecipeIndex.primaryOutputOrNull(entry.id());
+            if (indexedOutput != null) {
+                refresh.track(entry.id(), indexedOutput);
+                continue;
+            }
+
             for (ItemStack result : entry.resultItems(context)) {
                 if (!result.isEmpty()) {
                     refresh.track(entry.id(), result.getItem());
@@ -147,7 +153,7 @@ public final class VisibleRecipeCraftability {
     }
 
     private static RecipePlanner.PlanningSession captureSession(Environment environment) {
-        return RecipePlanner.createWorkerSession(environment.player, environment.scoringMode)
+        return RecipePlanner.createWorkerSession(environment.player, environment.settings)
                 .filter(session -> session.recipeIndexGeneration()
                         == environment.recipeIndexGeneration)
                 .orElse(null);
@@ -199,7 +205,7 @@ public final class VisibleRecipeCraftability {
 
         try {
             CompletableFuture<Boolean> task = CompletableFuture.supplyAsync(
-                    () -> job.session.plan(job.output, 1, job::isCancelled).isPresent(),
+                    () -> job.session.canPlan(job.output, 1, job::isCancelled),
                     PLANNING_EXECUTOR
             );
             task.whenCompleteAsync(
@@ -250,10 +256,7 @@ public final class VisibleRecipeCraftability {
             Level level,
             int inventoryVersion,
             AbstractContainerMenu menu,
-            CraftingGrid craftingGrid,
-            int recursionDepth,
-            int maxCandidatesPerLayer,
-            LazyCraftConfig.ScoringMode scoringMode,
+            RecipePlanner.Settings settings,
             long recipeIndexGeneration
     ) {
         private static Environment capture(Minecraft minecraft) {
@@ -271,15 +274,19 @@ public final class VisibleRecipeCraftability {
                 return null;
             }
 
+            RecipePlanner.Settings settings = new RecipePlanner.Settings(
+                    craftingGrid,
+                    config.recursionDepth,
+                    config.maxCandidatesPerLayer,
+                    config.scoringMode
+            );
+
             return new Environment(
                     minecraft.player,
                     minecraft.level,
                     minecraft.player.getInventory().getTimesChanged(),
                     minecraft.player.containerMenu,
-                    craftingGrid,
-                    config.recursionDepth,
-                    config.maxCandidatesPerLayer,
-                    config.scoringMode,
+                    settings,
                     RecipeIndex.generation()
             );
         }
@@ -293,7 +300,6 @@ public final class VisibleRecipeCraftability {
         private final Map<Item, Boolean> craftableByOutput;
         private final Deque<Item> pendingOutputs = new ArrayDeque<>();
         private final Set<Item> visibleOutputs = new LinkedHashSet<>();
-        private final Set<Item> queuedOutputs = new HashSet<>();
 
         private Refresh(
                 long generation,
@@ -309,14 +315,12 @@ public final class VisibleRecipeCraftability {
 
         private void track(RecipeDisplayId recipe, Item output) {
             outputByRecipe.put(recipe, output);
-            visibleOutputs.add(output);
-            if (!craftableByOutput.containsKey(output) && queuedOutputs.add(output)) {
+            if (visibleOutputs.add(output) && !craftableByOutput.containsKey(output)) {
                 pendingOutputs.addLast(output);
             }
         }
 
         private State finish() {
-            craftableByOutput.keySet().retainAll(visibleOutputs);
             if (outputByRecipe.isEmpty()) {
                 return EMPTY_STATE;
             }
@@ -370,7 +374,8 @@ public final class VisibleRecipeCraftability {
                     && environment.player == other.player
                     && environment.level == other.level
                     && environment.menu == other.menu
-                    && environment.craftingGrid.equals(other.craftingGrid);
+                    && environment.settings.craftingGrid()
+                    .equals(other.settings.craftingGrid());
         }
 
         private boolean isRecursivelyCraftable(RecipeDisplayId recipe) {
