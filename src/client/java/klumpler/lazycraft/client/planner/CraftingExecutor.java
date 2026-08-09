@@ -7,7 +7,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.AbstractCraftingMenu;
 import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.display.*;
 
 import java.util.*;
 
@@ -104,10 +108,30 @@ public final class CraftingExecutor {
         LazyCraftConfig config = LazyCraftConfigManager.get();
         executionUpdateTimeoutTicks = config.serverUpdateTimeoutTicks;
         executionStepDelayTicks = config.stepDelayTicks;
-        queuedCrafts.addAll(craftsToQueue);
+        queuedCrafts.addAll(mergeAdjacentCrafts(craftsToQueue));
         completionCallback = onComplete;
         startNextCraft(minecraft, menu);
         return true;
+    }
+
+    private static List<QueuedCraft> mergeAdjacentCrafts(List<QueuedCraft> crafts) {
+        if (crafts.size() < 2) {
+            return crafts;
+        }
+
+        List<QueuedCraft> merged = new ArrayList<>(crafts.size());
+        for (QueuedCraft craft : crafts) {
+            if (!merged.isEmpty()) {
+                int previousIndex = merged.size() - 1;
+                QueuedCraft combined = merged.get(previousIndex).mergeWithOrNull(craft);
+                if (combined != null) {
+                    merged.set(previousIndex, combined);
+                    continue;
+                }
+            }
+            merged.add(craft);
+        }
+        return merged;
     }
 
     /**
@@ -148,22 +172,10 @@ public final class CraftingExecutor {
         }
 
         switch (activeCraft.phase) {
-            case WAITING_FOR_PLACEMENT -> takeResult(minecraft, activeCraft, menu);
-            case WAITING_FOR_CRAFT -> {
-                activeCraft.remainingCrafts--;
-                if (activeCraft.remainingCrafts == 0) {
-                    LazyCraft.LOGGER.info("Finished crafting {}", itemName(activeCraft.step.output()));
-                    if (!queuedCrafts.isEmpty()) {
-                        activeCraft.phase = Phase.WAITING_TO_START_NEXT_STEP;
-                        activeCraft.ticksWaiting = 0;
-                    } else {
-                        activeCraft = null;
-                        runCompletionCallback();
-                    }
-                } else {
-                    placeRecipe(minecraft, activeCraft, menu);
-                }
-            }
+            case WAITING_FOR_PLACEMENT -> handleInitialPlacement(minecraft, activeCraft, menu);
+            case WAITING_FOR_BATCH_PLACEMENT -> handleBatchPlacement(minecraft, activeCraft, menu);
+            case WAITING_FOR_CRAFT -> finishCrafts(minecraft, activeCraft, menu, 1);
+            case WAITING_FOR_BATCH_CRAFT -> finishBatchCraft(minecraft, activeCraft, menu);
         }
     }
 
@@ -179,7 +191,8 @@ public final class CraftingExecutor {
                 menu.containerId,
                 step.crafts(),
                 nextCraft.takeResultToCursor(),
-                nextCraft.useMaxItems()
+                nextCraft.useMaxItems(),
+                nextCraft.recipeAlreadyPlaced()
         );
         if (nextCraft.recipeAlreadyPlaced()) {
             takeResult(minecraft, activeCraft, menu);
@@ -189,7 +202,92 @@ public final class CraftingExecutor {
     }
 
     private static void placeRecipe(Minecraft minecraft, ActiveCraft active, AbstractCraftingMenu menu) {
-        waitForMenuUpdate(active, Phase.WAITING_FOR_PLACEMENT, menu);
+        active.expectedStagedCrafts = 1;
+        active.batchTargetCrafts = 1;
+        active.pendingBatchCrafts = 0;
+        sendPlacement(minecraft, active, menu, Phase.WAITING_FOR_PLACEMENT);
+    }
+
+    private static void handleInitialPlacement(
+            Minecraft minecraft,
+            ActiveCraft active,
+            AbstractCraftingMenu menu
+    ) {
+        if (!hasExpectedResult(active, menu)) {
+            stop("the server could not place " + itemName(active.step.output()));
+            return;
+        }
+
+        if (!active.batchEnabled) {
+            takeResult(minecraft, active, menu);
+            return;
+        }
+
+        int stagedCrafts = uniformStagedCrafts(menu);
+        if (stagedCrafts != 1) {
+            stop("the server placed an unexpected initial recipe amount");
+            return;
+        }
+
+        if (recipeMayReturnIngredients(active.step.recipe())
+                || hasCraftingRemainder(menu)) {
+            active.batchEnabled = false;
+            takeResult(minecraft, active, menu);
+            return;
+        }
+
+        int targetCrafts = calculateBatchTarget(minecraft, active, menu);
+        if (targetCrafts <= 1) {
+            active.batchEnabled = false;
+            takeResult(minecraft, active, menu);
+            return;
+        }
+
+        active.batchTargetCrafts = targetCrafts;
+        active.expectedStagedCrafts = 2;
+        sendPlacement(minecraft, active, menu, Phase.WAITING_FOR_BATCH_PLACEMENT);
+    }
+
+    private static void handleBatchPlacement(
+            Minecraft minecraft,
+            ActiveCraft active,
+            AbstractCraftingMenu menu
+    ) {
+        if (!hasExpectedResult(active, menu)) {
+            stop("the server stopped matching the staged recipe");
+            return;
+        }
+
+        int stagedCrafts = uniformStagedCrafts(menu);
+        if (stagedCrafts != active.expectedStagedCrafts) {
+            stop("the server staged an unexpected recipe amount");
+            return;
+        }
+        if (hasCraftingRemainder(menu)) {
+            stop("the staged recipe changed to an ingredient with a crafting remainder");
+            return;
+        }
+
+        active.batchTargetCrafts = Math.min(
+                active.batchTargetCrafts,
+                exactIngredientLimit(minecraft, menu)
+        );
+        if (active.expectedStagedCrafts < active.batchTargetCrafts) {
+            active.expectedStagedCrafts++;
+            sendPlacement(minecraft, active, menu, Phase.WAITING_FOR_BATCH_PLACEMENT);
+            return;
+        }
+
+        takeBatchResult(minecraft, active, menu);
+    }
+
+    private static void sendPlacement(
+            Minecraft minecraft,
+            ActiveCraft active,
+            AbstractCraftingMenu menu,
+            Phase phase
+    ) {
+        waitForMenuUpdate(active, phase, menu);
         minecraft.gameMode.handlePlaceRecipe(
                 menu.containerId,
                 active.step.recipe().id(),
@@ -198,7 +296,7 @@ public final class CraftingExecutor {
     }
 
     private static void takeResult(Minecraft minecraft, ActiveCraft active, AbstractCraftingMenu menu) {
-        if (!menu.getResultSlot().getItem().is(active.step.output())) {
+        if (!hasExpectedResult(active, menu)) {
             stop("the server could not place " + itemName(active.step.output()));
             return;
         }
@@ -211,6 +309,255 @@ public final class CraftingExecutor {
                 active.takeResultToCursor ? ContainerInput.PICKUP : ContainerInput.QUICK_MOVE,
                 minecraft.player
         );
+    }
+
+    private static void takeBatchResult(
+            Minecraft minecraft,
+            ActiveCraft active,
+            AbstractCraftingMenu menu
+    ) {
+        ItemStack result = menu.getResultSlot().getItem();
+        if (result.isEmpty() || !result.is(active.step.output())) {
+            stop("the server could not finish staging " + itemName(active.step.output()));
+            return;
+        }
+
+        active.pendingBatchCrafts = active.expectedStagedCrafts;
+        active.batchOutput = result.copy();
+        active.outputItemsBeforeBatch = countInventoryStack(minecraft, active.batchOutput);
+        active.outputItemsPerCraft = result.getCount();
+        waitForMenuUpdate(active, Phase.WAITING_FOR_BATCH_CRAFT, menu);
+        minecraft.gameMode.handleContainerInput(
+                menu.containerId,
+                menu.getResultSlot().index,
+                0,
+                ContainerInput.QUICK_MOVE,
+                minecraft.player
+        );
+    }
+
+    private static void finishBatchCraft(
+            Minecraft minecraft,
+            ActiveCraft active,
+            AbstractCraftingMenu menu
+    ) {
+        long outputIncrease = countInventoryStack(minecraft, active.batchOutput)
+                - active.outputItemsBeforeBatch;
+        long expectedIncrease = Math.multiplyExact(
+                (long) active.pendingBatchCrafts,
+                active.outputItemsPerCraft
+        );
+        if (outputIncrease != expectedIncrease) {
+            stop("the server completed an unexpected number of staged crafts");
+            return;
+        }
+
+        finishCrafts(minecraft, active, menu, active.pendingBatchCrafts);
+    }
+
+    private static void finishCrafts(
+            Minecraft minecraft,
+            ActiveCraft active,
+            AbstractCraftingMenu menu,
+            int completedCrafts
+    ) {
+        active.remainingCrafts -= completedCrafts;
+        if (active.remainingCrafts > 0) {
+            placeRecipe(minecraft, active, menu);
+            return;
+        }
+
+        LazyCraft.LOGGER.info("Finished crafting {}", itemName(active.step.output()));
+        if (!queuedCrafts.isEmpty()) {
+            active.phase = Phase.WAITING_TO_START_NEXT_STEP;
+            active.ticksWaiting = 0;
+        } else {
+            activeCraft = null;
+            runCompletionCallback();
+        }
+    }
+
+    private static boolean hasExpectedResult(
+            ActiveCraft active,
+            AbstractCraftingMenu menu
+    ) {
+        return menu.getResultSlot().getItem().is(active.step.output());
+    }
+
+    private static int uniformStagedCrafts(AbstractCraftingMenu menu) {
+        int stagedCrafts = 0;
+        for (Slot slot : menu.getInputGridSlots()) {
+            ItemStack stack = slot.getItem();
+            if (stack.isEmpty()) {
+                continue;
+            }
+            if (stagedCrafts == 0) {
+                stagedCrafts = stack.getCount();
+            } else if (stack.getCount() != stagedCrafts) {
+                return -1;
+            }
+        }
+        return stagedCrafts;
+    }
+
+    private static int calculateBatchTarget(
+            Minecraft minecraft,
+            ActiveCraft active,
+            AbstractCraftingMenu menu
+    ) {
+        ItemStack result = menu.getResultSlot().getItem();
+        long outputCapacity = availableInventoryCapacity(minecraft, result);
+        long craftsThatFit = outputCapacity / result.getCount();
+        return (int) Math.min(
+                Math.min((long) active.remainingCrafts, exactIngredientLimit(minecraft, menu)),
+                craftsThatFit
+        );
+    }
+
+    /**
+     * Limits staging to full layers of the exact ingredient variants Minecraft placed.
+     * A recipe may accept alternatives that cannot share one grid stack, such as different
+     * plank types, even though the planner correctly treats either type as valid.
+     */
+    private static int exactIngredientLimit(Minecraft minecraft, AbstractCraftingMenu menu) {
+        List<Slot> inputSlots = menu.getInputGridSlots();
+        int limit = inputStackLimit(menu);
+        for (int index = 0; index < inputSlots.size(); index++) {
+            ItemStack ingredient = inputSlots.get(index).getItem();
+            if (ingredient.isEmpty() || appearedEarlier(inputSlots, index, ingredient)) {
+                continue;
+            }
+
+            int ingredientsPerCraft = 0;
+            long available = 0;
+            for (Slot slot : inputSlots) {
+                ItemStack stack = slot.getItem();
+                if (ItemStack.isSameItemSameComponents(stack, ingredient)) {
+                    ingredientsPerCraft++;
+                    available += stack.getCount();
+                }
+            }
+            for (ItemStack stack : minecraft.player.getInventory().getNonEquipmentItems()) {
+                if (ItemStack.isSameItemSameComponents(stack, ingredient)) {
+                    available += stack.getCount();
+                }
+            }
+            limit = Math.min(limit, (int) Math.min(Integer.MAX_VALUE, available / ingredientsPerCraft));
+        }
+        return limit;
+    }
+
+    private static boolean appearedEarlier(List<Slot> slots, int endIndex, ItemStack ingredient) {
+        for (int index = 0; index < endIndex; index++) {
+            if (ItemStack.isSameItemSameComponents(slots.get(index).getItem(), ingredient)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int inputStackLimit(AbstractCraftingMenu menu) {
+        int limit = Integer.MAX_VALUE;
+        for (Slot slot : menu.getInputGridSlots()) {
+            ItemStack stack = slot.getItem();
+            if (!stack.isEmpty()) {
+                limit = Math.min(limit, stack.getMaxStackSize());
+            }
+        }
+        return limit == Integer.MAX_VALUE ? 1 : limit;
+    }
+
+    private static boolean hasCraftingRemainder(AbstractCraftingMenu menu) {
+        for (Slot slot : menu.getInputGridSlots()) {
+            ItemStack stack = slot.getItem();
+            if (!stack.isEmpty() && stack.getItem().getCraftingRemainder() != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @SuppressWarnings("deprecation") // 26.1 exposes each ingredient's authoritative holder set here.
+    private static boolean recipeMayReturnIngredients(RecipeDisplayEntry recipe) {
+        if (recipeDisplayHasRemainder(recipe.display())) {
+            return true;
+        }
+
+        Optional<List<Ingredient>> requirements = recipe.craftingRequirements();
+        if (requirements.isEmpty()) {
+            return true;
+        }
+        for (Ingredient ingredient : requirements.get()) {
+            if (ingredient.items().anyMatch(holder -> holder.value().getCraftingRemainder() != null)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean recipeDisplayHasRemainder(RecipeDisplay display) {
+        List<SlotDisplay> ingredients;
+        if (display instanceof ShapedCraftingRecipeDisplay shaped) {
+            ingredients = shaped.ingredients();
+        } else if (display instanceof ShapelessCraftingRecipeDisplay shapeless) {
+            ingredients = shapeless.ingredients();
+        } else {
+            return true;
+        }
+
+        for (SlotDisplay ingredient : ingredients) {
+            if (slotDisplayHasRemainder(ingredient)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean slotDisplayHasRemainder(SlotDisplay display) {
+        if (display instanceof SlotDisplay.WithRemainder) {
+            return true;
+        }
+        if (display instanceof SlotDisplay.Composite(List<SlotDisplay> contents)) {
+            for (SlotDisplay choice : contents) {
+                if (slotDisplayHasRemainder(choice)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (display instanceof SlotDisplay.OnlyWithComponent filtered) {
+            return slotDisplayHasRemainder(filtered.source());
+        }
+        if (display instanceof SlotDisplay.WithAnyPotion(SlotDisplay display1)) {
+            return slotDisplayHasRemainder(display1);
+        }
+        return !(display instanceof SlotDisplay.Empty
+                || display instanceof SlotDisplay.ItemSlotDisplay
+                || display instanceof SlotDisplay.ItemStackSlotDisplay
+                || display instanceof SlotDisplay.TagSlotDisplay
+                || display instanceof SlotDisplay.AnyFuel);
+    }
+
+    private static long availableInventoryCapacity(Minecraft minecraft, ItemStack result) {
+        long capacity = 0;
+        for (ItemStack stack : minecraft.player.getInventory().getNonEquipmentItems()) {
+            if (stack.isEmpty()) {
+                capacity += result.getMaxStackSize();
+            } else if (ItemStack.isSameItemSameComponents(stack, result)) {
+                capacity += stack.getMaxStackSize() - stack.getCount();
+            }
+        }
+        return capacity;
+    }
+
+    private static long countInventoryStack(Minecraft minecraft, ItemStack expected) {
+        long count = 0;
+        for (ItemStack stack : minecraft.player.getInventory().getNonEquipmentItems()) {
+            if (ItemStack.isSameItemSameComponents(stack, expected)) {
+                count += stack.getCount();
+            }
+        }
+        return count;
     }
 
     private static void waitForMenuUpdate(ActiveCraft active, Phase phase, AbstractCraftingMenu menu) {
@@ -240,7 +587,9 @@ public final class CraftingExecutor {
 
     private enum Phase {
         WAITING_FOR_PLACEMENT,
+        WAITING_FOR_BATCH_PLACEMENT,
         WAITING_FOR_CRAFT,
+        WAITING_FOR_BATCH_CRAFT,
         WAITING_TO_START_NEXT_STEP
     }
 
@@ -250,6 +599,30 @@ public final class CraftingExecutor {
             boolean useMaxItems,
             boolean recipeAlreadyPlaced
     ) {
+        private QueuedCraft mergeWithOrNull(QueuedCraft next) {
+            if (takeResultToCursor
+                    || next.takeResultToCursor
+                    || useMaxItems
+                    || next.useMaxItems
+                    || recipeAlreadyPlaced
+                    || next.recipeAlreadyPlaced
+                    || step.output() != next.step.output()
+                    || !step.recipe().id().equals(next.step.recipe().id())
+                    || step.crafts() > Integer.MAX_VALUE - next.step.crafts()) {
+                return null;
+            }
+
+            return new QueuedCraft(
+                    new CraftingStep(
+                            step.recipe(),
+                            step.output(),
+                            step.crafts() + next.step.crafts()
+                    ),
+                    false,
+                    false,
+                    false
+            );
+        }
     }
 
     private static final class ActiveCraft {
@@ -257,7 +630,14 @@ public final class CraftingExecutor {
         private final int containerId;
         private final boolean takeResultToCursor;
         private final boolean useMaxItems;
+        private boolean batchEnabled;
         private int remainingCrafts;
+        private int expectedStagedCrafts = 1;
+        private int batchTargetCrafts = 1;
+        private int pendingBatchCrafts;
+        private ItemStack batchOutput = ItemStack.EMPTY;
+        private long outputItemsBeforeBatch;
+        private int outputItemsPerCraft;
         private int expectedStateId;
         private int ticksWaiting;
         private Phase phase = Phase.WAITING_FOR_PLACEMENT;
@@ -267,13 +647,18 @@ public final class CraftingExecutor {
                 int containerId,
                 int remainingCrafts,
                 boolean takeResultToCursor,
-                boolean useMaxItems
+                boolean useMaxItems,
+                boolean recipeAlreadyPlaced
         ) {
             this.step = step;
             this.containerId = containerId;
             this.remainingCrafts = remainingCrafts;
             this.takeResultToCursor = takeResultToCursor;
             this.useMaxItems = useMaxItems;
+            this.batchEnabled = remainingCrafts > 1
+                    && !takeResultToCursor
+                    && !useMaxItems
+                    && !recipeAlreadyPlaced;
         }
     }
 }
