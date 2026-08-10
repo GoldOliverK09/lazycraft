@@ -7,7 +7,7 @@ intuitive to use.
 
 ## Recursive Crafting
 
-<img src="src/main/resources/assets/lazycraft/recursive-craft.gif" alt="Recursive Crafting Example">
+<img src="docs/images/recursive-craft.gif" alt="Recursive Crafting Example">
 
 Crafting an item you don't have the ingredients for?
 
@@ -15,7 +15,7 @@ LazyCraft crafts those ingredients for you! (Provided you have the ingredients f
 
 ## Direct Recipe Book Crafting
 
-<img src="src/main/resources/assets/lazycraft/recipe-book-craft.gif" alt="Recipe Book Crafting Example">
+<img src="docs/images/recipe-book-craft.gif" alt="Recipe Book Crafting Example">
 
 Double-click a recipe in the recipe book to have it automatically crafted and placed in your inventory.
 
