@@ -45,5 +45,16 @@
   "text.lazycraft.scoring_mode.least_base_inputs.tooltip.tie_breakers": "Tie-breakers: batch surplus, executions, then steps.",
   "text.lazycraft.scoring_mode.least_overproduction": "Batch surplus",
   "text.lazycraft.scoring_mode.least_overproduction.tooltip.primary": "Creates the least surplus caused by recipe batch sizes.",
-  "text.lazycraft.scoring_mode.least_overproduction.tooltip.tie_breakers": "Tie-breakers: ingredients, executions, then steps."
+  "text.lazycraft.scoring_mode.least_overproduction.tooltip.tie_breakers": "Tie-breakers: ingredients, executions, then steps.",
+  "commands.lazycraft.shopping.empty_hand": "Hold an item in either hand, or provide an item ID.",
+  "commands.lazycraft.shopping.unavailable": "A shopping list cannot be calculated right now.",
+  "commands.lazycraft.shopping.calculating": "Calculating %s shopping list for %s...",
+  "commands.lazycraft.shopping.failed": "The shopping list calculation failed. See the log for details.",
+  "commands.lazycraft.shopping.inventory_changed": "Your inventory changed while calculating. Run the command again for an accurate list.",
+  "commands.lazycraft.shopping.no_recipe": "No supported crafting-table recipe was found for %s.",
+  "commands.lazycraft.shopping.complete": "You already have everything needed to craft %s.",
+  "commands.lazycraft.shopping.title": "Missing %s for %s:",
+  "commands.lazycraft.shopping.entry": "- %s × %s",
+  "commands.lazycraft.shopping.mode.ingredients": "ingredients",
+  "commands.lazycraft.shopping.mode.raw": "raw materials"
 }
