@@ -4,11 +4,7 @@ import com.terraformersmc.modmenu.api.ConfigScreenFactory;
 import com.terraformersmc.modmenu.api.ModMenuApi;
 import klumpler.lazycraft.LazyCraft;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.AlertScreen;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.CommonComponents;
-import net.minecraft.network.chat.Component;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -23,14 +19,7 @@ public final class LazyCraftModMenuIntegration implements ModMenuApi {
         if (clothScreen != null) {
             return clothScreen;
         }
-
-        return new AlertScreen(
-                () -> Minecraft.getInstance().setScreen(parent),
-                Component.translatable("text.lazycraft.config.cloth_missing.title"),
-                Component.translatable("text.lazycraft.config.cloth_missing.message"),
-                CommonComponents.GUI_BACK,
-                false
-        );
+        return parent;
     }
 
     private static Screen createClothScreen(Screen parent) {
