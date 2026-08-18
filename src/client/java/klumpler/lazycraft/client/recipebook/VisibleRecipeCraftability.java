@@ -52,7 +52,10 @@ public final class VisibleRecipeCraftability {
      */
     public static void beginRefresh() {
         State previousState = activeState;
-        long generation = invalidateCurrentWork();
+        long generation = ++nextGeneration;
+        refresh = null;
+        backgroundCooldownTicks = 0;
+        cancelInFlightJob();
         Environment environment = Environment.capture(Minecraft.getInstance());
         if (environment == null) {
             if (previousState.hasRecursivelyCraftableResults()) {
