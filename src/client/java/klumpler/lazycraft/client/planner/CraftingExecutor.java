@@ -30,36 +30,6 @@ public final class CraftingExecutor {
     }
 
     /**
-     * Executes one selected recipe and runs {@code onComplete} after it succeeds.
-     */
-    public static boolean execute(CraftingStep step, boolean useMaxItems, Runnable onComplete) {
-        Objects.requireNonNull(step, "step cannot be null");
-        return executeQueuedCrafts(
-                List.of(new QueuedCraft(step, false, useMaxItems, false)),
-                onComplete
-        );
-    }
-
-    /**
-     * Takes an already-placed recipe result and runs {@code onComplete} after it succeeds.
-     */
-    public static boolean executePlaced(CraftingStep step, Runnable onComplete) {
-        Objects.requireNonNull(step, "step cannot be null");
-
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null
-                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
-                || !menu.getResultSlot().getItem().is(step.output())) {
-            return false;
-        }
-
-        return executeQueuedCrafts(
-                List.of(new QueuedCraft(step, false, false, true)),
-                onComplete
-        );
-    }
-
-    /**
      * Executes a plan and runs {@code onComplete} after its final craft succeeds.
      */
     public static boolean execute(CraftPlan plan, Runnable onComplete) {
@@ -85,9 +55,7 @@ public final class CraftingExecutor {
         for (int index = 0; index < steps.size(); index++) {
             craftsToQueue.add(new QueuedCraft(
                     steps.get(index),
-                    takeFinalResultToCursor && index == lastStepIndex,
-                    false,
-                    false
+                    takeFinalResultToCursor && index == lastStepIndex
             ));
         }
         return executeQueuedCrafts(craftsToQueue, onComplete);
@@ -190,15 +158,9 @@ public final class CraftingExecutor {
                 step,
                 menu.containerId,
                 step.crafts(),
-                nextCraft.takeResultToCursor(),
-                nextCraft.useMaxItems(),
-                nextCraft.recipeAlreadyPlaced()
+                nextCraft.takeResultToCursor()
         );
-        if (nextCraft.recipeAlreadyPlaced()) {
-            takeResult(minecraft, activeCraft, menu);
-        } else {
-            placeRecipe(minecraft, activeCraft, menu);
-        }
+        placeRecipe(minecraft, activeCraft, menu);
     }
 
     private static void placeRecipe(Minecraft minecraft, ActiveCraft active, AbstractCraftingMenu menu) {
@@ -291,7 +253,7 @@ public final class CraftingExecutor {
         minecraft.gameMode.handlePlaceRecipe(
                 menu.containerId,
                 active.step.recipe().id(),
-                active.useMaxItems
+                false
         );
     }
 
@@ -599,17 +561,11 @@ public final class CraftingExecutor {
 
     private record QueuedCraft(
             CraftingStep step,
-            boolean takeResultToCursor,
-            boolean useMaxItems,
-            boolean recipeAlreadyPlaced
+            boolean takeResultToCursor
     ) {
         private QueuedCraft mergeWithOrNull(QueuedCraft next) {
             if (takeResultToCursor
                     || next.takeResultToCursor
-                    || useMaxItems
-                    || next.useMaxItems
-                    || recipeAlreadyPlaced
-                    || next.recipeAlreadyPlaced
                     || step.output() != next.step.output()
                     || !step.recipe().id().equals(next.step.recipe().id())
                     || step.crafts() > Integer.MAX_VALUE - next.step.crafts()) {
@@ -622,8 +578,6 @@ public final class CraftingExecutor {
                             step.output(),
                             step.crafts() + next.step.crafts()
                     ),
-                    false,
-                    false,
                     false
             );
         }
@@ -633,7 +587,6 @@ public final class CraftingExecutor {
         private final CraftingStep step;
         private final int containerId;
         private final boolean takeResultToCursor;
-        private final boolean useMaxItems;
         private boolean batchEnabled;
         private int remainingCrafts;
         private int expectedStagedCrafts = 1;
@@ -650,19 +603,14 @@ public final class CraftingExecutor {
                 CraftingStep step,
                 int containerId,
                 int remainingCrafts,
-                boolean takeResultToCursor,
-                boolean useMaxItems,
-                boolean recipeAlreadyPlaced
+                boolean takeResultToCursor
         ) {
             this.step = step;
             this.containerId = containerId;
             this.remainingCrafts = remainingCrafts;
             this.takeResultToCursor = takeResultToCursor;
-            this.useMaxItems = useMaxItems;
             this.batchEnabled = remainingCrafts > 1
-                    && !takeResultToCursor
-                    && !useMaxItems
-                    && !recipeAlreadyPlaced;
+                    && !takeResultToCursor;
         }
     }
 }

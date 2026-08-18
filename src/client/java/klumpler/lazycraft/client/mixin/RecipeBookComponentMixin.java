@@ -3,7 +3,6 @@ package klumpler.lazycraft.client.mixin;
 import klumpler.lazycraft.client.config.LazyCraftConfig;
 import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import klumpler.lazycraft.client.planner.CraftingExecutor;
-import klumpler.lazycraft.client.planner.CraftingStep;
 import klumpler.lazycraft.client.planner.RecipePlanner;
 import klumpler.lazycraft.client.recipebook.VisibleRecipeCraftability;
 import net.minecraft.client.Minecraft;
@@ -97,16 +96,6 @@ public class RecipeBookComponentMixin {
         }
 
         if (recipeCollection.isCraftable(recipe)) {
-            // The first click is handled by vanilla and places the recipe.
-            // Further clicks on it use LazyCraft's direct crafting shortcut.
-            if (!recipe.equals(lastPlacedRecipe)) {
-                return;
-            }
-
-            if (lazycraft$executeVanillaRecipe(recipeCollection, recipe, useMaxItems)) {
-                ghostSlots.clear();
-                cir.setReturnValue(true);
-            }
             return;
         }
 
@@ -116,7 +105,7 @@ public class RecipeBookComponentMixin {
 
         // The first click is handled by vanilla and displays the ghost recipe.
         // Further clicks on it confirm LazyCraft's recursive crafting action.
-        if (!recipe.equals(lastPlacedRecipe)) {
+        if (!recipe.equals(lastPlacedRecipe) || !lazycraft$hasGhostRecipe()) {
             return;
         }
 
@@ -133,6 +122,7 @@ public class RecipeBookComponentMixin {
         if (!config.recipeBookCrafting
                 || !config.recursiveRecipeBookCrafting
                 || CraftingExecutor.isExecuting()
+                || !lazycraft$hasGhostRecipe()
                 || lastPlacedRecipe == null
                 || lastRecipeCollection == null
                 || minecraft.player == null
@@ -178,51 +168,15 @@ public class RecipeBookComponentMixin {
     }
 
     @Unique
-    private boolean lazycraft$executeVanillaRecipe(
-            RecipeCollection recipeCollection,
-            RecipeDisplayId recipe,
-            boolean useMaxItems
-    ) {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.level == null) {
-            return false;
-        }
-
-        RecipeDisplayEntry entry = lazycraft$findRecipeEntry(recipeCollection, recipe);
-        if (entry == null) {
-            return false;
-        }
-
-        ContextMap context = SlotDisplayContext.fromLevel(minecraft.level);
-        ItemStack result = lazycraft$firstResult(entry, context);
-        if (result.isEmpty()) {
-            return false;
-        }
-
-        CraftingStep step = new CraftingStep(entry, result.getItem(), 1);
-        Runnable restoreRecipe = () -> lazycraft$restoreVanillaRecipe(recipe);
-        if (!useMaxItems && CraftingExecutor.executePlaced(step, restoreRecipe)) {
-            return true;
-        }
-        return CraftingExecutor.execute(step, useMaxItems, restoreRecipe);
-    }
-
-    @Unique
-    private void lazycraft$restoreVanillaRecipe(RecipeDisplayId recipe) {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null
-                || minecraft.gameMode == null
-                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
-            return;
-        }
-
-        // The server replaces this with a ghost recipe when another set cannot be placed.
-        minecraft.gameMode.handlePlaceRecipe(menu.containerId, recipe, false);
-    }
-
-    @Unique
     private void lazycraft$restoreGhostRecipe(RecipeDisplay recipe) {
         ((RecipeBookComponent<?>) (Object) this).fillGhostRecipe(recipe);
+    }
+
+    @Unique
+    private boolean lazycraft$hasGhostRecipe() {
+        return !((GhostSlotsAccessor) ghostSlots)
+                .lazycraft$getIngredients()
+                .isEmpty();
     }
 
     @Unique

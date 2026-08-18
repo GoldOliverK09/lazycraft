@@ -48,6 +48,15 @@ public final class LazyCraftConfigScreen {
                 .build());
 
         recipeBookCategory.addEntry(builder.entryBuilder()
+                .startBooleanToggle(
+                        optionLabel("showRecursiveCraftability"),
+                        config.showRecursiveCraftability)
+                .setDefaultValue(true)
+                .setTooltip(optionTooltip("showRecursiveCraftability"))
+                .setSaveConsumer(value -> config.showRecursiveCraftability = value)
+                .build());
+
+        recipeBookCategory.addEntry(builder.entryBuilder()
                 .startIntSlider(
                         optionLabel("backgroundRecipeCheckDelayTicks"),
                         config.backgroundRecipeCheckDelayTicks,

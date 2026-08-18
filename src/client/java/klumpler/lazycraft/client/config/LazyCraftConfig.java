@@ -28,6 +28,11 @@ public final class LazyCraftConfig {
     public boolean recursiveRecipeBookCrafting = true;
 
     /**
+     * Shows recursively craftable recipes as available in the recipe book.
+     */
+    public boolean showRecursiveCraftability = true;
+
+    /**
      * Additional ticks between non-visible recipe-book craftability checks.
      */
     public int backgroundRecipeCheckDelayTicks = DEFAULT_BACKGROUND_RECIPE_CHECK_DELAY_TICKS;

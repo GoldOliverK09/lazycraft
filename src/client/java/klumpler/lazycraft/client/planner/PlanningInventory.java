@@ -1,16 +1,17 @@
 package klumpler.lazycraft.client.planner;
 
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractCraftingMenu;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * Detached item/count inventory used by the pure planning search.
- * Entries stay in player-slot order because alternative ingredients are consumed in that order.
+ * Entries stay in player-slot, crafting-grid, then cursor order because alternative ingredients
+ * are consumed in that order.
  */
 final class PlanningInventory {
     private Item[] items;
@@ -26,8 +27,11 @@ final class PlanningInventory {
     static PlanningInventory from(Player player) {
         Objects.requireNonNull(player, "player cannot be null");
         int inventorySize = player.getInventory().getContainerSize();
-        Item[] items = new Item[inventorySize];
-        int[] counts = new int[inventorySize];
+        List<Slot> inputSlots = player.containerMenu instanceof AbstractCraftingMenu menu
+                ? menu.getInputGridSlots()
+                : List.of();
+        Item[] items = new Item[inventorySize + inputSlots.size() + 1];
+        int[] counts = new int[items.length];
         int size = 0;
 
         for (int slot = 0; slot < inventorySize; slot++) {
@@ -39,7 +43,31 @@ final class PlanningInventory {
             }
         }
 
+        for (Slot slot : inputSlots) {
+            ItemStack stack = slot.getItem();
+            if (!stack.isEmpty()) {
+                items[size] = stack.getItem();
+                counts[size] = stack.getCount();
+                size++;
+            }
+        }
+
+        ItemStack carried = player.containerMenu.getCarried();
+        if (!carried.isEmpty()) {
+            items[size] = carried.getItem();
+            counts[size] = carried.getCount();
+            size++;
+        }
+
         return new PlanningInventory(items, counts, size);
+    }
+
+    Map<Item, Integer> itemCounts() {
+        Map<Item, Integer> itemCounts = new HashMap<>();
+        for (int index = 0; index < size; index++) {
+            itemCounts.merge(items[index], counts[index], Math::addExact);
+        }
+        return Map.copyOf(itemCounts);
     }
 
     PlanningInventory copy() {
