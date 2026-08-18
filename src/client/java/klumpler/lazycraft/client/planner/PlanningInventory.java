@@ -15,18 +15,11 @@ import java.util.Objects;
 final class PlanningInventory {
     private Item[] items;
     private int[] counts;
-    private boolean[] originalItems;
     private int size;
 
-    private PlanningInventory(
-            Item[] items,
-            int[] counts,
-            boolean[] originalItems,
-            int size
-    ) {
+    private PlanningInventory(Item[] items, int[] counts, int size) {
         this.items = items;
         this.counts = counts;
-        this.originalItems = originalItems;
         this.size = size;
     }
 
@@ -35,7 +28,6 @@ final class PlanningInventory {
         int inventorySize = player.getInventory().getContainerSize();
         Item[] items = new Item[inventorySize];
         int[] counts = new int[inventorySize];
-        boolean[] originalItems = new boolean[inventorySize];
         int size = 0;
 
         for (int slot = 0; slot < inventorySize; slot++) {
@@ -43,19 +35,17 @@ final class PlanningInventory {
             if (!stack.isEmpty()) {
                 items[size] = stack.getItem();
                 counts[size] = stack.getCount();
-                originalItems[size] = true;
                 size++;
             }
         }
 
-        return new PlanningInventory(items, counts, originalItems, size);
+        return new PlanningInventory(items, counts, size);
     }
 
     PlanningInventory copy() {
         return new PlanningInventory(
                 Arrays.copyOf(items, size),
                 Arrays.copyOf(counts, size),
-                Arrays.copyOf(originalItems, size),
                 size
         );
     }
@@ -80,7 +70,6 @@ final class PlanningInventory {
         ensureCapacity(size + 1);
         items[size] = item;
         counts[size] = count;
-        originalItems[size] = false;
         size++;
     }
 
@@ -88,17 +77,16 @@ final class PlanningInventory {
      * Consumes in stable entry order. A failed attempt may have consumed part of this
      * inventory, so callers must use a disposable branch copy when success is uncertain.
      */
-    Consumption consumeItems(Collection<Item> acceptedItems, int quantity) {
+    boolean consumeItems(Collection<Item> acceptedItems, int quantity) {
         Objects.requireNonNull(acceptedItems, "acceptedItems cannot be null");
         if (quantity < 0) {
             throw new IllegalArgumentException("quantity cannot be negative");
         }
         if (quantity == 0) {
-            return Consumption.SUCCESS_WITHOUT_ITEMS;
+            return true;
         }
 
         int remaining = quantity;
-        int originalItemsConsumed = 0;
         int writeIndex = 0;
 
         for (int readIndex = 0; readIndex < size; readIndex++) {
@@ -107,22 +95,18 @@ final class PlanningInventory {
                 int consumed = Math.min(count, remaining);
                 count -= consumed;
                 remaining -= consumed;
-                if (originalItems[readIndex]) {
-                    originalItemsConsumed = Math.addExact(originalItemsConsumed, consumed);
-                }
             }
 
             if (count > 0) {
                 items[writeIndex] = items[readIndex];
                 counts[writeIndex] = count;
-                originalItems[writeIndex] = originalItems[readIndex];
                 writeIndex++;
             }
         }
 
         Arrays.fill(items, writeIndex, size, null);
         size = writeIndex;
-        return new Consumption(remaining == 0, originalItemsConsumed);
+        return remaining == 0;
     }
 
     private void ensureCapacity(int requiredCapacity) {
@@ -133,10 +117,5 @@ final class PlanningInventory {
         int expandedCapacity = Math.max(requiredCapacity, items.length + (items.length >> 1) + 1);
         items = Arrays.copyOf(items, expandedCapacity);
         counts = Arrays.copyOf(counts, expandedCapacity);
-        originalItems = Arrays.copyOf(originalItems, expandedCapacity);
-    }
-
-    record Consumption(boolean successful, int originalItemsConsumed) {
-        private static final Consumption SUCCESS_WITHOUT_ITEMS = new Consumption(true, 0);
     }
 }

@@ -76,12 +76,8 @@ public final class LazyCraftConfig {
 
     public enum ScoringMode {
         LEAST_TOTAL_INGREDIENTS,
-        FEWEST_STEPS,
-        FEWEST_RECIPE_EXECUTIONS,
         FASTEST_EXECUTION,
-        INVENTORY_FIRST,
         SHALLOWEST_CHAIN,
-        LEAST_BASE_INPUTS,
         LEAST_OVERPRODUCTION
     }
 }

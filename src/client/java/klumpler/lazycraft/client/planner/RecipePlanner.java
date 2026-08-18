@@ -251,33 +251,15 @@ public final class RecipePlanner {
                 case LEAST_TOTAL_INGREDIENTS -> Comparator
                         .comparingLong(SearchResult::totalIngredients)
                         .thenComparingInt(SearchResult::stepCount);
-                case FEWEST_STEPS -> Comparator
-                        .comparingInt(SearchResult::stepCount)
-                        .thenComparingLong(SearchResult::totalIngredients);
-                case FEWEST_RECIPE_EXECUTIONS -> Comparator
-                        .comparingLong(SearchResult::recipeExecutions)
-                        .thenComparingLong(SearchResult::totalIngredients)
-                        .thenComparingInt(SearchResult::stepCount);
                 case FASTEST_EXECUTION -> Comparator
                         .comparingLong(SearchResult::recipeExecutions)
                         .thenComparingInt(SearchResult::stepCount)
                         .thenComparingLong(SearchResult::totalIngredients);
-                case INVENTORY_FIRST -> Comparator
-                        .comparingLong(SearchResult::recursivelySuppliedIngredients)
-                        .thenComparingLong(SearchResult::recipeExecutions)
-                        .thenComparingLong(SearchResult::totalIngredients)
-                        .thenComparingInt(SearchResult::stepCount);
                 case SHALLOWEST_CHAIN -> Comparator
                         .comparingInt(SearchResult::maximumDependencyDepth)
                         .thenComparingLong(SearchResult::recipeExecutions)
                         .thenComparingLong(SearchResult::totalIngredients)
                         .thenComparingInt(SearchResult::stepCount);
-                case LEAST_BASE_INPUTS -> Comparator
-                        .comparingLong(SearchResult::baseInputsConsumed)
-                        .thenComparingLong(SearchResult::overproduction)
-                        .thenComparingLong(SearchResult::recipeExecutions)
-                        .thenComparingInt(SearchResult::stepCount)
-                        .thenComparingLong(SearchResult::totalIngredients);
                 case LEAST_OVERPRODUCTION -> Comparator
                         .comparingLong(SearchResult::overproduction)
                         .thenComparingLong(SearchResult::totalIngredients)
@@ -465,10 +447,8 @@ public final class RecipePlanner {
             int initiallyAvailable = start.inventory().availableItems(acceptedItems);
             if (initiallyAvailable >= quantity) {
                 PlanningInventory consumedInventory = start.inventory().copy();
-                PlanningInventory.Consumption consumption =
-                        consumedInventory.consumeItems(acceptedItems, quantity);
-                return consumption.successful()
-                        ? List.of(start.withConsumedInventory(consumedInventory, consumption))
+                return consumedInventory.consumeItems(acceptedItems, quantity)
+                        ? List.of(start.withConsumedInventory(consumedInventory))
                         : List.of();
             }
 
@@ -541,14 +521,10 @@ public final class RecipePlanner {
                         ? partial.produced
                         : partial.produced.withMissingItem(partial.item, partial.shortage);
                 PlanningInventory consumedInventory = completed.inventory().copy();
-                PlanningInventory.Consumption consumption =
-                        consumedInventory.consumeItems(acceptedItems, quantity);
-                if (consumption.successful()) {
+                if (consumedInventory.consumeItems(acceptedItems, quantity)) {
                     candidates.add(start.combine(
                             completed,
                             consumedInventory,
-                            consumption,
-                            initiallyMissing - partial.shortage,
                             collectSteps
                     ));
                 }
@@ -717,14 +693,10 @@ public final class RecipePlanner {
                 for (SearchResult produced : producedResults) {
                     ensureNotCancelled();
                     PlanningInventory consumedInventory = produced.inventory().copy();
-                    PlanningInventory.Consumption consumption =
-                            consumedInventory.consumeItems(acceptedItems, quantity);
-                    if (consumption.successful()) {
+                    if (consumedInventory.consumeItems(acceptedItems, quantity)) {
                         candidates.add(start.combine(
                                 produced,
                                 consumedInventory,
-                                consumption,
-                                missing,
                                 collectSteps
                         ));
                     }
@@ -776,8 +748,6 @@ public final class RecipePlanner {
             int stepCount,
             long totalIngredients,
             long recipeExecutions,
-            long recursivelySuppliedIngredients,
-            long baseInputsConsumed,
             long overproduction,
             int maximumDependencyDepth,
             long missingItemCount,
@@ -787,8 +757,6 @@ public final class RecipePlanner {
             return new SearchResult(
                     inventory,
                     List.of(),
-                    0,
-                    0,
                     0,
                     0,
                     0,
@@ -815,18 +783,13 @@ public final class RecipePlanner {
             return Collections.unmodifiableMap(merged);
         }
 
-        private SearchResult withConsumedInventory(
-                PlanningInventory inventory,
-                PlanningInventory.Consumption consumption
-        ) {
+        private SearchResult withConsumedInventory(PlanningInventory inventory) {
             return new SearchResult(
                     inventory,
                     steps,
                     stepCount,
                     totalIngredients,
                     recipeExecutions,
-                    recursivelySuppliedIngredients,
-                    Math.addExact(baseInputsConsumed, consumption.originalItemsConsumed()),
                     overproduction,
                     maximumDependencyDepth,
                     missingItemCount,
@@ -845,8 +808,6 @@ public final class RecipePlanner {
                     stepCount,
                     totalIngredients,
                     recipeExecutions,
-                    recursivelySuppliedIngredients,
-                    baseInputsConsumed,
                     overproduction,
                     maximumDependencyDepth,
                     Math.addExact(missingItemCount, count),
@@ -857,8 +818,6 @@ public final class RecipePlanner {
         private SearchResult combine(
                 SearchResult next,
                 PlanningInventory inventory,
-                PlanningInventory.Consumption consumption,
-                int recursivelySupplied,
                 boolean collectSteps
         ) {
             return new SearchResult(
@@ -867,17 +826,6 @@ public final class RecipePlanner {
                     Math.addExact(stepCount, next.stepCount),
                     Math.addExact(totalIngredients, next.totalIngredients),
                     Math.addExact(recipeExecutions, next.recipeExecutions),
-                    Math.addExact(
-                            Math.addExact(
-                                    recursivelySuppliedIngredients,
-                                    next.recursivelySuppliedIngredients
-                            ),
-                            recursivelySupplied
-                    ),
-                    Math.addExact(
-                            Math.addExact(baseInputsConsumed, next.baseInputsConsumed),
-                            consumption.originalItemsConsumed()
-                    ),
                     Math.addExact(overproduction, next.overproduction),
                     Math.max(maximumDependencyDepth, next.maximumDependencyDepth),
                     Math.addExact(missingItemCount, next.missingItemCount),
@@ -908,8 +856,6 @@ public final class RecipePlanner {
                     Math.addExact(stepCount, 1),
                     Math.addExact(totalIngredients, ingredientCost),
                     Math.addExact(recipeExecutions, crafts),
-                    recursivelySuppliedIngredients,
-                    baseInputsConsumed,
                     Math.addExact(overproduction, extraOutput),
                     Math.max(maximumDependencyDepth, dependencyDepth),
                     missingItemCount,
