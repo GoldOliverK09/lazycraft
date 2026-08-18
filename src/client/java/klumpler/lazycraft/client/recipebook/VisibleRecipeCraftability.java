@@ -40,6 +40,7 @@ public final class VisibleRecipeCraftability {
     private static State activeState = EMPTY_STATE;
     private static Refresh refresh;
     private static Job inFlightJob;
+    private static long filterRevision;
     private static int backgroundCooldownTicks;
     private static boolean shuttingDown;
 
@@ -54,10 +55,16 @@ public final class VisibleRecipeCraftability {
         long generation = invalidateCurrentWork();
         Environment environment = Environment.capture(Minecraft.getInstance());
         if (environment == null) {
+            if (previousState.hasRecursivelyCraftableResults()) {
+                filterRevision++;
+            }
             return;
         }
 
         boolean canReuseState = previousState.matches(environment);
+        if (!canReuseState && previousState.hasRecursivelyCraftableResults()) {
+            filterRevision++;
+        }
         refresh = new Refresh(
                 generation,
                 environment,
@@ -102,12 +109,19 @@ public final class VisibleRecipeCraftability {
             return;
         }
 
-        activeState = refresh.finish();
+        State finishedState = refresh.finish();
+        if (finishedState == EMPTY_STATE && refresh.hasRecursivelyCraftableResults()) {
+            filterRevision++;
+        }
+        activeState = finishedState;
         refresh = null;
         dispatchNextJob();
     }
 
     public static void clear() {
+        if (activeState.hasRecursivelyCraftableResults()) {
+            filterRevision++;
+        }
         invalidateCurrentWork();
     }
 
@@ -125,6 +139,26 @@ public final class VisibleRecipeCraftability {
      */
     public static boolean isRecursivelyCraftable(RecipeDisplayId recipe) {
         return activeState.isRecursivelyCraftable(recipe);
+    }
+
+    /**
+     * Returns whether a selected entry in the collection has a cached recursive plan.
+     */
+    public static boolean hasRecursivelyCraftable(RecipeCollection collection) {
+        for (RecipeDisplayEntry entry
+                : collection.getSelectedRecipes(RecipeCollection.CraftableStatus.ANY)) {
+            if (isRecursivelyCraftable(entry.id())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Changes only when the recursively craftable contents of a filtered view may change.
+     */
+    public static long filterRevision() {
+        return filterRevision;
     }
 
     /**
@@ -172,7 +206,7 @@ public final class VisibleRecipeCraftability {
         Environment currentEnvironment = Environment.capture(minecraft);
         if (currentEnvironment == null
                 || !activeState.representsSamePage(currentEnvironment)) {
-            invalidateCurrentWork();
+            clear();
             return;
         }
 
@@ -182,13 +216,16 @@ public final class VisibleRecipeCraftability {
 
         RecipePlanner.PlanningSession session = captureSession(currentEnvironment);
         if (session == null) {
-            invalidateCurrentWork();
+            clear();
             return;
         }
 
         long generation = ++nextGeneration;
         cancelInFlightJob();
         backgroundCooldownTicks = 0;
+        if (activeState.hasRecursivelyCraftableResults()) {
+            filterRevision++;
+        }
         activeState = activeState.recalculate(generation, currentEnvironment, session);
     }
 
@@ -237,7 +274,11 @@ public final class VisibleRecipeCraftability {
         Throwable cause = unwrapCompletionException(failure);
         boolean currentGeneration = activeState.generation == job.generation;
         if (cause == null && currentGeneration) {
-            activeState.craftableByOutput.put(job.output, craftable);
+            Boolean previous = activeState.craftableByOutput.put(job.output, craftable);
+            if (!Objects.equals(previous, craftable)
+                    && (Boolean.TRUE.equals(previous) || Boolean.TRUE.equals(craftable))) {
+                filterRevision++;
+            }
         } else if (cause != null
                 && !(cause instanceof CancellationException)
                 && currentGeneration) {
@@ -368,6 +409,10 @@ public final class VisibleRecipeCraftability {
                     createPendingOutputs(visibleOutputs, craftableByOutput)
             );
         }
+
+        private boolean hasRecursivelyCraftableResults() {
+            return craftableByOutput.containsValue(Boolean.TRUE);
+        }
     }
 
     private record State(
@@ -406,7 +451,14 @@ public final class VisibleRecipeCraftability {
 
         private boolean isRecursivelyCraftable(RecipeDisplayId recipe) {
             Item output = outputByRecipe.get(recipe);
+            if (output == null) {
+                output = RecipeIndex.primaryOutputOrNull(recipe);
+            }
             return output != null && Boolean.TRUE.equals(craftableByOutput.get(output));
+        }
+
+        private boolean hasRecursivelyCraftableResults() {
+            return craftableByOutput.containsValue(Boolean.TRUE);
         }
 
         private Item nextPendingOutput(boolean allowBackground) {

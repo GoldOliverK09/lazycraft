@@ -6,7 +6,8 @@
     "ClientRecipeBookMixin",
     "RecipeBookComponentMixin",
     "RecipeBookPageMixin",
-    "RecipeButtonMixin"
+    "RecipeButtonMixin",
+    "RecipeCollectionMixin"
   ],
   "injectors": {
     "defaultRequire": 1

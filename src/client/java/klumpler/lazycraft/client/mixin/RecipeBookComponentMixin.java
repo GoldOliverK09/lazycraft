@@ -5,6 +5,7 @@ import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import klumpler.lazycraft.client.planner.CraftingExecutor;
 import klumpler.lazycraft.client.planner.CraftingStep;
 import klumpler.lazycraft.client.planner.RecipePlanner;
+import klumpler.lazycraft.client.recipebook.VisibleRecipeCraftability;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.recipebook.GhostSlots;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
@@ -23,8 +24,11 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+import java.util.function.Predicate;
 
 @Mixin(RecipeBookComponent.class)
 public class RecipeBookComponentMixin {
@@ -37,6 +41,48 @@ public class RecipeBookComponentMixin {
 
     @Shadow
     private RecipeCollection lastRecipeCollection;
+
+    @Unique
+    private long lazycraft$filterRevision;
+
+    @Shadow
+    private boolean isFiltering() {
+        throw new AssertionError();
+    }
+
+    @Shadow
+    private void updateCollections(boolean resetPage, boolean filtering) {
+        throw new AssertionError();
+    }
+
+    @ModifyArg(
+            method = "updateCollections",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Ljava/util/List;removeIf(Ljava/util/function/Predicate;)Z",
+                    ordinal = 2
+            ),
+            index = 0
+    )
+    private Predicate<RecipeCollection> lazycraft$includeRecursiveCollections(
+            Predicate<RecipeCollection> vanillaFilter
+    ) {
+        return collection -> vanillaFilter.test(collection)
+                && !VisibleRecipeCraftability.hasRecursivelyCraftable(collection);
+    }
+
+    @Inject(method = "tick", at = @At("TAIL"))
+    private void lazycraft$refreshRecursiveFilter(CallbackInfo ci) {
+        long currentRevision = VisibleRecipeCraftability.filterRevision();
+        if (currentRevision == lazycraft$filterRevision) {
+            return;
+        }
+
+        lazycraft$filterRevision = currentRevision;
+        if (isFiltering()) {
+            updateCollections(false, true);
+        }
+    }
 
     @Inject(method = "tryPlaceRecipe", at = @At("HEAD"), cancellable = true)
     private void lazycraft$executeGhostRecipePlan(
@@ -176,7 +222,7 @@ public class RecipeBookComponentMixin {
 
     @Unique
     private void lazycraft$restoreGhostRecipe(RecipeDisplay recipe) {
-        ((RecipeBookComponent) (Object) this).fillGhostRecipe(recipe);
+        ((RecipeBookComponent<?>) (Object) this).fillGhostRecipe(recipe);
     }
 
     @Unique
