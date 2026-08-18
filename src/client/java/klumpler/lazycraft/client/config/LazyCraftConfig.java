@@ -13,7 +13,7 @@ public final class LazyCraftConfig {
     static final int MIN_SERVER_UPDATE_TIMEOUT_TICKS = 1;
     static final int MAX_SERVER_UPDATE_TIMEOUT_TICKS = 300;
     static final int DEFAULT_SERVER_UPDATE_TIMEOUT_TICKS = 20;
-    static final int MIN_STEP_DELAY_TICKS = 1;
+    static final int MIN_STEP_DELAY_TICKS = 0;
     static final int MAX_STEP_DELAY_TICKS = 20;
     static final int DEFAULT_STEP_DELAY_TICKS = 1;
 

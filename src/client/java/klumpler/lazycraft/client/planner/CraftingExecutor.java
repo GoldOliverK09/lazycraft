@@ -369,8 +369,12 @@ public final class CraftingExecutor {
 
         LazyCraft.LOGGER.info("Finished crafting {}", itemName(active.step.output()));
         if (!queuedCrafts.isEmpty()) {
-            active.phase = Phase.WAITING_TO_START_NEXT_STEP;
-            active.ticksWaiting = 0;
+            if (executionStepDelayTicks == 0) {
+                startNextCraft(minecraft, menu);
+            } else {
+                active.phase = Phase.WAITING_TO_START_NEXT_STEP;
+                active.ticksWaiting = 0;
+            }
         } else {
             activeCraft = null;
             runCompletionCallback();
