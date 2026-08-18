@@ -13,6 +13,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.*;
 
@@ -120,7 +121,7 @@ public final class ShoppingListCommand {
         }
 
         LocalPlayer player = source.getPlayer();
-        int inventoryVersion = player.getInventory().getTimesChanged();
+        Map<Item, Integer> availableItemCounts = RecipePlanner.availableItemCounts(player);
         Component modeName = modeName(mode);
         Component targetName = new ItemStack(target).getHoverName();
         source.sendFeedback(Component.translatable(
@@ -144,7 +145,7 @@ public final class ShoppingListCommand {
                     (shoppingList, failure) -> complete(
                             source,
                             player,
-                            inventoryVersion,
+                            availableItemCounts,
                             target,
                             mode,
                             request,
@@ -167,7 +168,7 @@ public final class ShoppingListCommand {
     private static void complete(
             FabricClientCommandSource source,
             LocalPlayer player,
-            int inventoryVersion,
+            Map<Item, Integer> availableItemCounts,
             Item target,
             RecipePlanner.ShoppingMode mode,
             long request,
@@ -191,11 +192,11 @@ public final class ShoppingListCommand {
             source.sendError(Component.translatable("commands.lazycraft.shopping.failed"));
             return;
         }
-        if (player.getInventory().getTimesChanged() != inventoryVersion) {
+        if (!RecipePlanner.availableItemCounts(player).equals(availableItemCounts)) {
             source.sendError(Component.translatable("commands.lazycraft.shopping.inventory_changed"));
             return;
         }
-        if (shoppingList == null || shoppingList.isEmpty()) {
+        if (shoppingList.isEmpty()) {
             source.sendError(Component.translatable(
                     "commands.lazycraft.shopping.no_recipe",
                     new ItemStack(target).getHoverName()

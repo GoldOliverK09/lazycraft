@@ -52,12 +52,12 @@ public final class VisibleRecipeCraftability {
      */
     public static void beginRefresh() {
         State previousState = activeState;
-        long generation = ++nextGeneration;
         refresh = null;
-        backgroundCooldownTicks = 0;
-        cancelInFlightJob();
         Environment environment = Environment.capture(Minecraft.getInstance());
         if (environment == null) {
+            nextGeneration++;
+            backgroundCooldownTicks = 0;
+            cancelInFlightJob();
             if (previousState.hasRecursivelyCraftableResults()) {
                 filterRevision++;
             }
@@ -65,8 +65,14 @@ public final class VisibleRecipeCraftability {
         }
 
         boolean canReuseState = previousState.matches(environment);
-        if (!canReuseState && previousState.hasRecursivelyCraftableResults()) {
-            filterRevision++;
+        long generation = previousState.generation;
+        if (!canReuseState) {
+            generation = ++nextGeneration;
+            backgroundCooldownTicks = 0;
+            cancelInFlightJob();
+            if (previousState.hasRecursivelyCraftableResults()) {
+                filterRevision++;
+            }
         }
         refresh = new Refresh(
                 generation,
@@ -118,6 +124,7 @@ public final class VisibleRecipeCraftability {
         }
         activeState = finishedState;
         refresh = null;
+        prioritizeVisibleWork();
         dispatchNextJob();
     }
 
@@ -194,6 +201,18 @@ public final class VisibleRecipeCraftability {
         }
     }
 
+    private static void prioritizeVisibleWork() {
+        if (inFlightJob == null
+                || activeState == EMPTY_STATE
+                || inFlightJob.generation != activeState.generation
+                || activeState.visibleOutputs.contains(inFlightJob.output)
+                || !activeState.hasPendingVisibleOutput()) {
+            return;
+        }
+
+        inFlightJob.cancel();
+    }
+
     private static RecipePlanner.PlanningSession captureSession(Environment environment) {
         return RecipePlanner.createWorkerSession(environment.player, environment.settings)
                 .filter(session -> session.recipeIndexGeneration()
@@ -245,8 +264,7 @@ public final class VisibleRecipeCraftability {
         Job job = new Job(
                 activeState.generation,
                 output,
-                activeState.session,
-                activeState.visibleOutputs.contains(output)
+                activeState.session
         );
         inFlightJob = job;
 
@@ -293,7 +311,7 @@ public final class VisibleRecipeCraftability {
         }
 
         if (currentGeneration
-                && !job.visible
+                && !activeState.visibleOutputs.contains(job.output)
                 && !(cause instanceof CancellationException)) {
             backgroundCooldownTicks = LazyCraftConfigManager.get()
                     .backgroundRecipeCheckDelayTicks;
@@ -331,7 +349,7 @@ public final class VisibleRecipeCraftability {
     private record Environment(
             Player player,
             Level level,
-            int inventoryVersion,
+            Map<Item, Integer> availableItemCounts,
             AbstractContainerMenu menu,
             RecipePlanner.Settings settings,
             long recipeIndexGeneration
@@ -342,7 +360,9 @@ public final class VisibleRecipeCraftability {
             }
 
             LazyCraftConfig config = LazyCraftConfigManager.get();
-            if (!config.recipeBookCrafting || !config.recursiveRecipeBookCrafting) {
+            if (!config.recipeBookCrafting
+                    || !config.recursiveRecipeBookCrafting
+                    || !config.showRecursiveCraftability) {
                 return null;
             }
 
@@ -361,7 +381,7 @@ public final class VisibleRecipeCraftability {
             return new Environment(
                     minecraft.player,
                     minecraft.level,
-                    minecraft.player.getInventory().getTimesChanged(),
+                    RecipePlanner.availableItemCounts(minecraft.player),
                     minecraft.player.containerMenu,
                     settings,
                     RecipeIndex.generation()
@@ -464,6 +484,15 @@ public final class VisibleRecipeCraftability {
             return craftableByOutput.containsValue(Boolean.TRUE);
         }
 
+        private boolean hasPendingVisibleOutput() {
+            for (Item output : visibleOutputs) {
+                if (!craftableByOutput.containsKey(output)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private Item nextPendingOutput(boolean allowBackground) {
             while (!pendingOutputs.isEmpty()) {
                 Item output = pendingOutputs.peekFirst();
@@ -500,19 +529,16 @@ public final class VisibleRecipeCraftability {
         private final long generation;
         private final Item output;
         private final RecipePlanner.PlanningSession session;
-        private final boolean visible;
         private final AtomicBoolean cancelled = new AtomicBoolean();
 
         private Job(
                 long generation,
                 Item output,
-                RecipePlanner.PlanningSession session,
-                boolean visible
+                RecipePlanner.PlanningSession session
         ) {
             this.generation = generation;
             this.output = output;
             this.session = session;
-            this.visible = visible;
         }
 
         private void cancel() {
