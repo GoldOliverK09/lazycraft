@@ -74,6 +74,11 @@ public final class RecipePlanner {
         return Optional.of(new PlanningSession(inventory, settings, RecipeIndex.snapshot()));
     }
 
+    public enum ShoppingMode {
+        INGREDIENTS,
+        RAW
+    }
+
     public record Settings(
             CraftingGrid craftingGrid,
             int maxSearchDepth,
@@ -90,11 +95,6 @@ public final class RecipePlanner {
                 throw new IllegalArgumentException("maxCandidatesPerLayer must be positive");
             }
         }
-    }
-
-    public enum ShoppingMode {
-        INGREDIENTS,
-        RAW
     }
 
     public record MissingItem(Item item, int count) {
@@ -284,6 +284,10 @@ public final class RecipePlanner {
             if (Thread.currentThread().isInterrupted() || cancellation.getAsBoolean()) {
                 throw new CancellationException();
             }
+        }
+
+        private static int divideRoundUp(int dividend, int divisor) {
+            return dividend / divisor + (dividend % divisor == 0 ? 0 : 1);
         }
 
         private List<SearchResult> produce(
@@ -713,6 +717,19 @@ public final class RecipePlanner {
             return finishCandidates(candidates);
         }
 
+        private StableTopK<SearchResult> bestCandidates() {
+            return new StableTopK<>(maxCandidatesPerLayer, resultComparator);
+        }
+
+        private List<SearchResult> finishCandidates(StableTopK<SearchResult> candidates) {
+            ensureNotCancelled();
+            return candidates.takeValues();
+        }
+
+        private void ensureNotCancelled() {
+            ensureNotCancelled(cancellation);
+        }
+
         private enum RequirementMode {
             CRAFTABLE,
             INGREDIENT_LIST,
@@ -730,23 +747,6 @@ public final class RecipePlanner {
                 SearchResult produced,
                 int shortage
         ) {
-        }
-
-        private static int divideRoundUp(int dividend, int divisor) {
-            return dividend / divisor + (dividend % divisor == 0 ? 0 : 1);
-        }
-
-        private StableTopK<SearchResult> bestCandidates() {
-            return new StableTopK<>(maxCandidatesPerLayer, resultComparator);
-        }
-
-        private List<SearchResult> finishCandidates(StableTopK<SearchResult> candidates) {
-            ensureNotCancelled();
-            return candidates.takeValues();
-        }
-
-        private void ensureNotCancelled() {
-            ensureNotCancelled(cancellation);
         }
     }
 

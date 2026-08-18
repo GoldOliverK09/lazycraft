@@ -1,41 +1,41 @@
 {
-	"schemaVersion": 1,
-	"id": "lazycraft",
-	"version": "${version}",
-	"name": "LazyCraft",
-	"description": "A collection of quality-of-life crafting features to make crafting feel intuitive",
-	"authors": [
-		"GoldOliverK09"
-	],
-	"contact": {
-		"sources": "https://github.com/GoldOliverK09/lazy-craft",
-		"issues": "https://github.com/GoldOliverK09/lazy-craft/issues"
-	},
-	"license": "MIT",
-	"icon": "assets/lazycraft/icon.png",
-	"environment": "client",
-	"entrypoints": {
-		"client": [
-			"klumpler.lazycraft.LazyCraft"
-		],
-		"modmenu": [
-			"klumpler.lazycraft.client.integration.LazyCraftModMenuIntegration"
-		]
-	},
-	"mixins": [
-		{
-			"config": "lazycraft.client.mixins.json",
-			"environment": "client"
-		}
-	],
-	"depends": {
-		"fabricloader": ">=0.19.0",
-		"minecraft": ">=26.1 <26.3",
-		"java": ">=25",
-		"fabric-api": "*"
-	},
-	"suggests": {
-		"cloth-config": "*",
-		"modmenu": "*"
-	}
+  "schemaVersion": 1,
+  "id": "lazycraft",
+  "version": "${version}",
+  "name": "LazyCraft",
+  "description": "A collection of quality-of-life crafting features to make crafting feel intuitive",
+  "authors": [
+    "GoldOliverK09"
+  ],
+  "contact": {
+    "sources": "https://github.com/GoldOliverK09/lazy-craft",
+    "issues": "https://github.com/GoldOliverK09/lazy-craft/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/lazycraft/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "klumpler.lazycraft.LazyCraft"
+    ],
+    "modmenu": [
+      "klumpler.lazycraft.client.integration.LazyCraftModMenuIntegration"
+    ]
+  },
+  "mixins": [
+    {
+      "config": "lazycraft.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.0",
+    "minecraft": ">=26.1 <26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "cloth-config": "*",
+    "modmenu": "*"
+  }
 }
