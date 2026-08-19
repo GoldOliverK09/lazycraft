@@ -31,6 +31,11 @@ bin/
 # fabric
 
 run/
+runs/
+
+# Minecraft development instances
+**/run/
+**/runs/
 
 # java
 

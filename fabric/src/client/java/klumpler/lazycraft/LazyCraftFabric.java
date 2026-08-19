@@ -8,16 +8,18 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import net.fabricmc.loader.api.FabricLoader;
 
-public final class LazyCraft implements ClientModInitializer {
-    public static final String MOD_ID = "lazycraft";
-    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
-
+/**
+ * Fabric-specific client bootstrap.
+ */
+public final class LazyCraftFabric implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
-        LOGGER.info("LazyCraft loaded!");
+        LazyCraft.LOGGER.info("LazyCraft loaded!");
+        LazyCraftConfigManager.initialize(
+                FabricLoader.getInstance().getConfigDir().resolve(LazyCraft.MOD_ID + ".json")
+        );
         LazyCraftConfigManager.load();
         ClientCommandRegistrationCallback.EVENT.register(ShoppingListCommand::register);
         ClientTickEvents.END_CLIENT_TICK.register(minecraft -> {

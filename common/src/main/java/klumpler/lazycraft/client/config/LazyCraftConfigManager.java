@@ -4,7 +4,6 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
 import klumpler.lazycraft.LazyCraft;
-import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -22,9 +21,7 @@ public final class LazyCraftConfigManager {
     private static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()
             .create();
-    private static final Path CONFIG_PATH = FabricLoader.getInstance()
-            .getConfigDir()
-            .resolve(LazyCraft.MOD_ID + ".json");
+    private static Path configPath;
 
     private static LazyCraftConfig config = new LazyCraftConfig();
     private static boolean loaded;
@@ -32,12 +29,23 @@ public final class LazyCraftConfigManager {
     private LazyCraftConfigManager() {
     }
 
+    /**
+     * Must be called by the active loader before the configuration is accessed.
+     */
+    public static synchronized void initialize(Path path) {
+        if (configPath != null && !configPath.equals(path)) {
+            throw new IllegalStateException("LazyCraft configuration path was already initialized");
+        }
+        configPath = path;
+    }
+
     public static synchronized void load() {
         if (loaded) {
             return;
         }
 
-        boolean createDefaultFile = !Files.exists(CONFIG_PATH);
+        Path path = configPath();
+        boolean createDefaultFile = !Files.exists(path);
         LazyCraftConfig loadedConfig = createDefaultFile
                 ? new LazyCraftConfig()
                 : readConfig();
@@ -59,28 +67,30 @@ public final class LazyCraftConfigManager {
         load();
         config.validate();
 
-        Path temporaryPath = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".tmp");
+        Path path = configPath();
+        Path temporaryPath = path.resolveSibling(path.getFileName() + ".tmp");
         try {
-            Files.createDirectories(CONFIG_PATH.getParent());
+            Files.createDirectories(path.getParent());
             try (Writer writer = Files.newBufferedWriter(temporaryPath, StandardCharsets.UTF_8)) {
                 GSON.toJson(config, writer);
             }
 
             moveIntoPlace(temporaryPath);
         } catch (IOException exception) {
-            LazyCraft.LOGGER.error("Could not save LazyCraft config to {}", CONFIG_PATH, exception);
+            LazyCraft.LOGGER.error("Could not save LazyCraft config to {}", path, exception);
         }
     }
 
     private static LazyCraftConfig readConfig() {
-        try (Reader reader = Files.newBufferedReader(CONFIG_PATH, StandardCharsets.UTF_8)) {
+        Path path = configPath();
+        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             LazyCraftConfig loadedConfig = GSON.fromJson(reader, LazyCraftConfig.class);
             if (loadedConfig != null) {
                 return loadedConfig;
             }
             LazyCraft.LOGGER.warn("LazyCraft config was empty; using defaults");
         } catch (IOException | JsonParseException exception) {
-            LazyCraft.LOGGER.error("Could not load LazyCraft config from {}; using defaults", CONFIG_PATH, exception);
+            LazyCraft.LOGGER.error("Could not load LazyCraft config from {}; using defaults", path, exception);
         }
         return new LazyCraftConfig();
     }
@@ -89,12 +99,19 @@ public final class LazyCraftConfigManager {
         try {
             Files.move(
                     temporaryPath,
-                    CONFIG_PATH,
+                    configPath(),
                     StandardCopyOption.ATOMIC_MOVE,
                     StandardCopyOption.REPLACE_EXISTING
             );
         } catch (AtomicMoveNotSupportedException ignored) {
-            Files.move(temporaryPath, CONFIG_PATH, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(temporaryPath, configPath(), StandardCopyOption.REPLACE_EXISTING);
         }
+    }
+
+    private static Path configPath() {
+        if (configPath == null) {
+            throw new IllegalStateException("LazyCraft configuration has not been initialized by a loader");
+        }
+        return configPath;
     }
 }

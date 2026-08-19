@@ -16,7 +16,7 @@
   "environment": "client",
   "entrypoints": {
     "client": [
-      "klumpler.lazycraft.LazyCraft"
+      "klumpler.lazycraft.LazyCraftFabric"
     ],
     "modmenu": [
       "klumpler.lazycraft.client.integration.LazyCraftModMenuIntegration"

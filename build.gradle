@@ -1,87 +1,10 @@
 plugins {
-    id 'net.fabricmc.fabric-loom' version "${loom_version}"
-    id 'maven-publish'
+    id 'net.fabricmc.fabric-loom' version "${loom_version}" apply false
+    // The common module uses NeoForm to compile loader-neutral Minecraft code.
+    id 'net.neoforged.moddev' version "${mdg_version}" apply false
 }
 
-version = project.mod_version
-group = project.maven_group
-
-repositories {
-    exclusiveContent {
-        forRepository {
-            //noinspection ForeignDelegate
-            maven {
-                name = "Modrinth"
-                url = "https://api.modrinth.com/maven"
-            }
-        }
-        filter {
-            includeGroup "maven.modrinth"
-        }
-    }
-}
-
-loom {
-    splitEnvironmentSourceSets()
-
-    mods {
-        "lazycraft" {
-            //noinspection GroovyAssignabilityCheck,GrUnresolvedAccess
-            sourceSet sourceSets.main
-            //noinspection GroovyAssignabilityCheck,GrUnresolvedAccess
-            sourceSet sourceSets.client
-        }
-    }
-}
-
-dependencies {
-    // To change the versions see the gradle.properties file
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
-
-    // Fabric API. This is technically optional, but you probably want it anyway.
-    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-    clientCompileOnly "maven.modrinth:9s6osm5g:Nv3xnWXd" // Optional Cloth Config API integration
-    clientCompileOnly "maven.modrinth:mOgUt4GM:njXb639R" // Optional Mod Menu integration
-}
-
-processResources {
-    def modVersion = project.version
-    inputs.property "version", modVersion
-
-    filesMatching("fabric.mod.json") {
-        expand "version": modVersion
-    }
-}
-
-tasks.withType(JavaCompile).configureEach {
-    it.options.release = 25
-}
-
-java {
-    // Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-    // if it is present.
-    // If you remove this line, sources will not be generated.
-    withSourcesJar()
-
-    sourceCompatibility = JavaVersion.VERSION_25
-    targetCompatibility = JavaVersion.VERSION_25
-}
-
-jar {
-    def projectName = project.name
-    inputs.property "projectName", projectName
-
-    from("LICENSE") {
-        rename { "${it}_$projectName" }
-    }
-}
-
-publishing {
-    publications {
-        create("mavenJava", MavenPublication) {
-            //noinspection GroovyAssignabilityCheck,GrUnresolvedAccess
-            from components.java
-        }
-    }
+allprojects {
+    group = project.maven_group
+    version = project.mod_version
 }

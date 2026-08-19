@@ -1,4 +1,4 @@
-![LazyCraft Icon](src/main/resources/assets/lazycraft/icon.png)
+![LazyCraft Icon](common/src/main/resources/assets/lazycraft/icon.png)
 
 # LazyCraft
 

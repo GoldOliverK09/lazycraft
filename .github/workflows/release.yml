@@ -19,10 +19,14 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v6
 
+      - name: Read required Java version
+        id: java
+        shell: bash
+        run: echo "version=$(sed -n 's/^java_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
-          java-version: '25'
+          java-version: ${{ steps.java.outputs.version }}
           distribution: 'microsoft'
 
       - name: Make Gradle wrapper executable
@@ -31,14 +35,20 @@ jobs:
       - name: Build release JAR
         run: ./gradlew build --no-daemon
 
-      - name: List build output
-        run: ls -la build/libs/
-
-      - name: Prepare release JAR
+      - name: Collect distribution JARs
+        shell: bash
         run: |
-          mkdir release
-          find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-sources.jar' -exec cp {} release/ \;
-          test "$(find release -maxdepth 1 -type f -name '*.jar' | wc -l)" -eq 1
+          mkdir -p release
+          for loader in fabric neoforge forge; do
+            directory="$loader/build/libs"
+            if [[ -d "$directory" ]]; then
+              find "$directory" -maxdepth 1 -type f -name '*.jar' \
+                ! -name '*-sources.jar' ! -name '*-javadoc.jar' \
+                -exec cp {} release/ \;
+            fi
+          done
+          test -n "$(find release -maxdepth 1 -type f -name '*.jar' -print -quit)"
+          ls -la release
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
