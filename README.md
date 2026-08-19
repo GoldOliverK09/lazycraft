@@ -1,4 +1,4 @@
-<img src="src/main/resources/assets/lazycraft/icon.png" width="128" alt="LazyCraft Icon">
+![LazyCraft Icon](src/main/resources/assets/lazycraft/icon.png)
 
 # LazyCraft
 
@@ -7,7 +7,7 @@ intuitive to use.
 
 ## Recursive Crafting
 
-<img src="docs/images/recursive-craft.gif" alt="Recursive Crafting Example">
+![Recursive Crafting Example](docs/images/recursive-craft.gif)
 
 Crafting an item you don't have the ingredients for?
 
@@ -15,17 +15,9 @@ LazyCraft crafts those ingredients for you! (Provided you have the ingredients f
 
 ## Direct Recipe Book Crafting
 
-<img src="docs/images/recipe-book-craft.gif" alt="Recipe Book Crafting Example">
+![Recipe Book Crafting Example](docs/images/recipe-book-craft.gif)
 
 Double-click a recipe in the recipe book to have it automatically crafted and placed in your inventory.
-
-## Inventory Space
-
-Some free inventory space is recommended.
-
-LazyCraft temporarily places intermediate items into your inventory so they can be used by the following crafting steps.
-If your inventory is completely full, Minecraft may briefly display or drop ghost items during the process. These do not
-replace or consume any additional ingredients, but crafting is more reliable when a few slots are available.
 
 ## Features
 
