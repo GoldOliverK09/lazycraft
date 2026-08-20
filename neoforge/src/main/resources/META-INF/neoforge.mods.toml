@@ -7,7 +7,7 @@ issueTrackerURL = "https://github.com/GoldOliverK09/lazy-craft/issues"
 modId = "lazycraft"
 version = "${version}"
 displayName = "${mod_name}"
-logoFile = "assets/lazycraft/icon.png"
+iconFile = "assets/lazycraft/icon.png"
 authors = "${mod_author}"
 description = '''${description}'''
 
