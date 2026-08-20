@@ -21,11 +21,6 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * Evaluates the current recipe-book page first, then warms the remaining recipe-book
- * outputs in the background. Minecraft-dependent inputs are captured on the client
- * thread; the detached planning search runs on one cancellable daemon worker.
- */
 public final class VisibleRecipeCraftability {
     private static final ExecutorService PLANNING_EXECUTOR =
             Executors.newSingleThreadExecutor(task -> {
@@ -47,9 +42,6 @@ public final class VisibleRecipeCraftability {
     private VisibleRecipeCraftability() {
     }
 
-    /**
-     * Starts collecting the recipes that vanilla is about to bind to visible buttons.
-     */
     public static void beginRefresh() {
         State previousState = activeState;
         refresh = null;
@@ -84,9 +76,6 @@ public final class VisibleRecipeCraftability {
         );
     }
 
-    /**
-     * Records the uncraftable recipes represented by one visible recipe-book button.
-     */
     public static void track(RecipeCollection collection, ContextMap context) {
         if (refresh == null || collection.hasCraftable()) {
             return;
@@ -109,9 +98,6 @@ public final class VisibleRecipeCraftability {
         }
     }
 
-    /**
-     * Publishes the recipes collected during the current page refresh.
-     */
     public static void finishRefresh() {
         if (refresh == null) {
             activeState = EMPTY_STATE;
@@ -135,25 +121,39 @@ public final class VisibleRecipeCraftability {
         invalidateCurrentWork();
     }
 
-    /**
-     * Stops the owned worker without waiting for an in-progress search.
-     */
     public static void shutdown() {
         shuttingDown = true;
         invalidateCurrentWork();
         PLANNING_EXECUTOR.shutdownNow();
     }
 
-    /**
-     * Returns a cached result only; recursive planning is never performed while rendering.
-     */
     public static boolean isRecursivelyCraftable(RecipeDisplayId recipe) {
         return activeState.isRecursivelyCraftable(recipe);
     }
 
-    /**
-     * Returns whether a selected entry in the collection has a cached recursive plan.
-     */
+    public static List<RecipeDisplayEntry> includeRecursivelyCraftableEntries(
+            RecipeCollection collection,
+            List<RecipeDisplayEntry> entries,
+            Set<RecipeDisplayId> selected,
+            List<RecipeDisplayEntry> vanillaEntries
+    ) {
+        List<RecipeDisplayEntry> expanded = null;
+        for (RecipeDisplayEntry entry : entries) {
+            RecipeDisplayId recipe = entry.id();
+            if (!selected.contains(recipe)
+                    || collection.isCraftable(recipe)
+                    || !isRecursivelyCraftable(recipe)) {
+                continue;
+            }
+
+            if (expanded == null) {
+                expanded = new ArrayList<>(vanillaEntries);
+            }
+            expanded.add(entry);
+        }
+        return expanded != null ? expanded : vanillaEntries;
+    }
+
     public static boolean hasRecursivelyCraftable(RecipeCollection collection) {
         for (RecipeDisplayEntry entry
                 : collection.getSelectedRecipes(RecipeCollection.CraftableStatus.ANY)) {
@@ -164,16 +164,10 @@ public final class VisibleRecipeCraftability {
         return false;
     }
 
-    /**
-     * Changes only when the recursively craftable contents of a filtered view may change.
-     */
     public static long filterRevision() {
         return filterRevision;
     }
 
-    /**
-     * Revalidates cached state and schedules pending work on the client thread.
-     */
     public static void tick(Minecraft minecraft) {
         if (shuttingDown) {
             return;

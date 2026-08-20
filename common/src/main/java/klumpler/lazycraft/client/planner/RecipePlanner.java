@@ -43,9 +43,6 @@ public final class RecipePlanner {
         return captureSession(PlanningInventory.from(player), settings);
     }
 
-    /**
-     * Returns the item totals available to crafting, independent of where they are stored.
-     */
     public static Map<Item, Integer> availableItemCounts(Player player) {
         Objects.requireNonNull(player, "player cannot be null");
         return PlanningInventory.from(player).itemCounts();

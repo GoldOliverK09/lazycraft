@@ -14,9 +14,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
-/**
- * Owns LazyCraft's configuration independently of any optional screen library.
- */
 public final class LazyCraftConfigManager {
     private static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()
@@ -29,9 +26,6 @@ public final class LazyCraftConfigManager {
     private LazyCraftConfigManager() {
     }
 
-    /**
-     * Must be called by the active loader before the configuration is accessed.
-     */
     public static synchronized void initialize(Path path) {
         if (configPath != null && !configPath.equals(path)) {
             throw new IllegalStateException("LazyCraft configuration path was already initialized");

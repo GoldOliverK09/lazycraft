@@ -5,9 +5,6 @@ import net.minecraft.world.inventory.AbstractCraftingMenu;
 
 import java.util.Optional;
 
-/**
- * The crafting grid currently available to the player.
- */
 public record CraftingGrid(int width, int height) {
     public static final CraftingGrid CRAFTING_TABLE = new CraftingGrid(3, 3);
 

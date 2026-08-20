@@ -11,14 +11,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Overlays cached recursive craftability onto the recipe book's filtered view without
- * modifying Minecraft's own direct-craftability state.
- */
 @Mixin(RecipeCollection.class)
 public class RecipeCollectionMixin {
     @Shadow
@@ -38,23 +33,11 @@ public class RecipeCollectionMixin {
             return;
         }
 
-        RecipeCollection collection = (RecipeCollection) (Object) this;
-        List<RecipeDisplayEntry> expanded = null;
-        for (RecipeDisplayEntry entry : entries) {
-            RecipeDisplayId recipe = entry.id();
-            if (!selected.contains(recipe)
-                    || collection.isCraftable(recipe)
-                    || !VisibleRecipeCraftability.isRecursivelyCraftable(recipe)) {
-                continue;
-            }
-
-            if (expanded == null) {
-                expanded = new ArrayList<>(cir.getReturnValue());
-            }
-            expanded.add(entry);
-        }
-
-        if (expanded != null) {
+        List<RecipeDisplayEntry> vanillaEntries = cir.getReturnValue();
+        List<RecipeDisplayEntry> expanded = VisibleRecipeCraftability.includeRecursivelyCraftableEntries(
+                (RecipeCollection) (Object) this, entries, selected, vanillaEntries
+        );
+        if (expanded != vanillaEntries) {
             cir.setReturnValue(expanded);
         }
     }

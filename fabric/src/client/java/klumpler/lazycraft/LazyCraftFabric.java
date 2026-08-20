@@ -10,9 +10,6 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.loader.api.FabricLoader;
 
-/**
- * Fabric-specific client bootstrap.
- */
 public final class LazyCraftFabric implements ClientModInitializer {
     @Override
     public void onInitializeClient() {

@@ -77,18 +77,11 @@ public final class RecipeIndex {
         return resolvedSnapshot.generation;
     }
 
-    /**
-     * Returns the first non-empty result item resolved while building the current index,
-     * or {@code null} when the entry is not present in that index.
-     */
     public static Item primaryOutputOrNull(RecipeDisplayId recipe) {
         Objects.requireNonNull(recipe, "recipe cannot be null");
         return resolvedSnapshot.primaryOutputs.get(recipe);
     }
 
-    /**
-     * Returns each unique primary recipe-book output in recipe-book order.
-     */
     public static List<Item> primaryOutputs() {
         return resolvedSnapshot.primaryOutputItems;
     }

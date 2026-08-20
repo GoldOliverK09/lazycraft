@@ -17,10 +17,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.*;
 
-/**
- * Registers and renders the client-side shopping-list command. Recipe analysis remains in
- * {@link RecipePlanner}; this class only captures command inputs and reports its result.
- */
 public final class ShoppingListCommand {
     private static final ExecutorService PLANNING_EXECUTOR =
             Executors.newSingleThreadExecutor(task -> {

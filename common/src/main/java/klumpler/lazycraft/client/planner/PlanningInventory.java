@@ -8,11 +8,6 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.*;
 
-/**
- * Detached item/count inventory used by the pure planning search.
- * Entries stay in player-slot, crafting-grid, then cursor order because alternative ingredients
- * are consumed in that order.
- */
 final class PlanningInventory {
     private Item[] items;
     private int[] counts;
@@ -101,10 +96,6 @@ final class PlanningInventory {
         size++;
     }
 
-    /**
-     * Consumes in stable entry order. A failed attempt may have consumed part of this
-     * inventory, so callers must use a disposable branch copy when success is uncertain.
-     */
     boolean consumeItems(Collection<Item> acceptedItems, int quantity) {
         Objects.requireNonNull(acceptedItems, "acceptedItems cannot be null");
         if (quantity < 0) {

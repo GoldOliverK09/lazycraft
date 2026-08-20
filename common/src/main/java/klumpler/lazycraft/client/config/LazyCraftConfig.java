@@ -17,43 +17,14 @@ public final class LazyCraftConfig {
     static final int MAX_STEP_DELAY_TICKS = 20;
     static final int DEFAULT_STEP_DELAY_TICKS = 1;
 
-    /**
-     * Enables LazyCraft's additional recipe-book click actions.
-     */
     public boolean recipeBookCrafting = true;
-
-    /**
-     * Allows ghost recipes to craft their missing crafting-table dependencies.
-     */
     public boolean recursiveRecipeBookCrafting = true;
-
-    /**
-     * Shows recursively craftable recipes as available in the recipe book.
-     */
     public boolean showRecursiveCraftability = true;
-
-    /**
-     * Additional ticks between non-visible recipe-book craftability checks.
-     */
     public int backgroundRecipeCheckDelayTicks = DEFAULT_BACKGROUND_RECIPE_CHECK_DELAY_TICKS;
-
     public int recursionDepth = DEFAULT_RECURSION_DEPTH;
-
-    /**
-     * Limits the number of candidate plans retained at each recursive search layer.
-     */
     public int maxCandidatesPerLayer = DEFAULT_CANDIDATES_PER_LAYER;
-
     public ScoringMode scoringMode = ScoringMode.LEAST_TOTAL_INGREDIENTS;
-
-    /**
-     * Number of ticks to wait for a server menu update before cancelling execution.
-     */
     public int serverUpdateTimeoutTicks = DEFAULT_SERVER_UPDATE_TIMEOUT_TICKS;
-
-    /**
-     * Number of ticks to wait between completed steps in a multi-step plan.
-     */
     public int stepDelayTicks = DEFAULT_STEP_DELAY_TICKS;
 
     public void validate() {

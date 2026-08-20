@@ -5,9 +5,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * Retains the best values in stable comparator order without collecting every candidate.
- */
 final class StableTopK<T> {
     private final int limit;
     private final Comparator<? super T> comparator;
@@ -54,9 +51,6 @@ final class StableTopK<T> {
         }
     }
 
-    /**
-     * Transfers the ordered values to the caller. This container must not be used afterward.
-     */
     List<T> takeValues() {
         return values;
     }

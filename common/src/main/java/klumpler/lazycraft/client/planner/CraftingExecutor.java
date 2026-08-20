@@ -16,10 +16,6 @@ import net.minecraft.world.item.crafting.display.*;
 
 import java.util.*;
 
-/**
- * Executes one crafting-table recipe at a time through Minecraft's normal client packet methods.
- * The server remains authoritative for every placement and result-slot click.
- */
 public final class CraftingExecutor {
     private static final Deque<QueuedCraft> queuedCrafts = new ArrayDeque<>();
     private static ActiveCraft activeCraft;
@@ -31,23 +27,14 @@ public final class CraftingExecutor {
     private CraftingExecutor() {
     }
 
-    /**
-     * Executes a plan and runs {@code onComplete} after its final craft succeeds.
-     */
     public static boolean execute(CraftPlan plan, Runnable onComplete) {
         return executePlan(plan, onComplete, false);
     }
 
-    /**
-     * Executes a plan, leaves its final result on the cursor, then runs {@code onComplete}.
-     */
     public static boolean executeToCursor(CraftPlan plan, Runnable onComplete) {
         return executePlan(plan, onComplete, true);
     }
 
-    /**
-     * Takes exactly one already-placed vanilla result, then stores it in the inventory.
-     */
     public static boolean takePlacedResultToInventory(ItemStack expectedResult) {
         Objects.requireNonNull(expectedResult, "expectedResult cannot be null");
         if (isExecuting()) {
@@ -140,9 +127,6 @@ public final class CraftingExecutor {
         return merged;
     }
 
-    /**
-     * Must run once per client tick. It advances only after the server updates the crafting menu.
-     */
     public static void tick(Minecraft minecraft) {
         if (directCraft != null) {
             tickDirectCraft(minecraft);
@@ -244,7 +228,7 @@ public final class CraftingExecutor {
             return;
         }
 
-        LazyCraft.LOGGER.info("Finished direct crafting {}", itemName(directCraft.result.getItem()));
+        LazyCraft.LOGGER.debug("Finished direct crafting {}", itemName(directCraft.result.getItem()));
         directCraft = null;
     }
 
@@ -347,6 +331,7 @@ public final class CraftingExecutor {
             Phase phase
     ) {
         waitForMenuUpdate(active, phase, menu);
+        assert minecraft.gameMode != null;
         minecraft.gameMode.handlePlaceRecipe(
                 menu.containerId,
                 active.step.recipe().id(),
@@ -361,6 +346,8 @@ public final class CraftingExecutor {
         }
 
         waitForMenuUpdate(active, Phase.WAITING_FOR_CRAFT, menu);
+        assert minecraft.gameMode != null;
+        assert minecraft.player != null;
         minecraft.gameMode.handleContainerInput(
                 menu.containerId,
                 menu.getResultSlot().index,
@@ -386,6 +373,8 @@ public final class CraftingExecutor {
         active.outputItemsBeforeBatch = countInventoryStack(minecraft, active.batchOutput);
         active.outputItemsPerCraft = result.getCount();
         waitForMenuUpdate(active, Phase.WAITING_FOR_BATCH_CRAFT, menu);
+        assert minecraft.gameMode != null;
+        assert minecraft.player != null;
         minecraft.gameMode.handleContainerInput(
                 menu.containerId,
                 menu.getResultSlot().index,
@@ -426,7 +415,7 @@ public final class CraftingExecutor {
             return;
         }
 
-        LazyCraft.LOGGER.info("Finished crafting {}", itemName(active.step.output()));
+        LazyCraft.LOGGER.debug("Finished crafting {}", itemName(active.step.output()));
         if (!queuedCrafts.isEmpty()) {
             if (executionStepDelayTicks == 0) {
                 startNextCraft(minecraft, menu);
@@ -477,11 +466,6 @@ public final class CraftingExecutor {
         );
     }
 
-    /**
-     * Limits staging to full layers of the exact ingredient variants Minecraft placed.
-     * A recipe may accept alternatives that cannot share one grid stack, such as different
-     * plank types, even though the planner correctly treats either type as valid.
-     */
     private static int exactIngredientLimit(Minecraft minecraft, AbstractCraftingMenu menu) {
         List<Slot> inputSlots = menu.getInputGridSlots();
         int limit = inputStackLimit(menu);
@@ -500,6 +484,7 @@ public final class CraftingExecutor {
                     available += stack.getCount();
                 }
             }
+            assert minecraft.player != null;
             for (ItemStack stack : minecraft.player.getInventory().getNonEquipmentItems()) {
                 if (ItemStack.isSameItemSameComponents(stack, ingredient)) {
                     available += stack.getCount();
@@ -603,6 +588,7 @@ public final class CraftingExecutor {
 
     private static long availableInventoryCapacity(Minecraft minecraft, ItemStack result) {
         long capacity = 0;
+        assert minecraft.player != null;
         for (ItemStack stack : minecraft.player.getInventory().getNonEquipmentItems()) {
             if (stack.isEmpty()) {
                 capacity += result.getMaxStackSize();
@@ -615,6 +601,7 @@ public final class CraftingExecutor {
 
     private static long countInventoryStack(Minecraft minecraft, ItemStack expected) {
         long count = 0;
+        assert minecraft.player != null;
         for (ItemStack stack : minecraft.player.getInventory().getNonEquipmentItems()) {
             if (ItemStack.isSameItemSameComponents(stack, expected)) {
                 count += stack.getCount();
@@ -628,6 +615,7 @@ public final class CraftingExecutor {
             AbstractCraftingMenu menu,
             ItemStack carried
     ) {
+        assert minecraft.player != null;
         Inventory inventory = minecraft.player.getInventory();
         int storageSlots = inventory.getNonEquipmentItems().size();
         Slot emptySlot = null;
@@ -660,6 +648,7 @@ public final class CraftingExecutor {
 
     private static void stop(String reason) {
         LazyCraft.LOGGER.warn("Stopped crafting executor: {}", reason);
+        LazyCraft.LOGGER.warn("Maybe try increase crafting execution delay?");
         directCraft = null;
         activeCraft = null;
         queuedCrafts.clear();
