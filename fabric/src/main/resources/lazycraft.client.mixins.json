@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "package": "klumpler.lazycraft.client.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "ClientRecipeBookMixin",
+    "GhostSlotsAccessor",
+    "RecipeBookComponentMixin",
+    "RecipeBookPageMixin",
+    "RecipeButtonMixin",
+    "RecipeCollectionMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}
