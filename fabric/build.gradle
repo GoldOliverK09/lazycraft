@@ -5,20 +5,6 @@ plugins {
 
 def commonBuildOutput = rootProject.layout.projectDirectory.dir('common/build')
 
-repositories {
-    exclusiveContent {
-        forRepository {
-            maven {
-                name = 'Modrinth'
-                url = 'https://api.modrinth.com/maven'
-            }
-        }
-        filter {
-            includeGroup 'maven.modrinth'
-        }
-    }
-}
-
 loom {
     splitEnvironmentSourceSets()
 
@@ -63,7 +49,7 @@ dependencies {
             commonBuildOutput.dir('classes/java/main'),
             commonBuildOutput.dir('resources/main')
     )
-    clientCompileOnly 'maven.modrinth:9s6osm5g:Nv3xnWXd' // Cloth Config API
+    clientCompileOnly "maven.modrinth:9s6osm5g:${cloth_config_fabric_version}" // Cloth Config API
     clientCompileOnly 'maven.modrinth:mOgUt4GM:njXb639R' // Mod Menu
 }
 

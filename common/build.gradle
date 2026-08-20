@@ -10,6 +10,8 @@ neoForge {
 dependencies {
     // Both current target loaders bundle Mixin; this is only needed to compile common mixins.
     compileOnly 'net.fabricmc:sponge-mixin:0.17.1+mixin.0.8.7'
+    // The shared config screen uses Cloth Config's loader-neutral API. Each loader adds its own runtime artifact.
+    compileOnly "maven.modrinth:9s6osm5g:${cloth_config_fabric_version}"
 }
 
 configurations {

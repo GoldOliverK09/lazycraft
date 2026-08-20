@@ -19,27 +19,30 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v6
 
-      - name: Read required Java version
-        id: java
+      - name: Read project versions
+        id: project
         shell: bash
-        run: echo "version=$(sed -n 's/^java_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "java=$(sed -n 's/^java_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
+          echo "minecraft=$(sed -n 's/^minecraft_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
+          echo "mod=$(sed -n 's/^mod_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
-          java-version: ${{ steps.java.outputs.version }}
+          java-version: ${{ steps.project.outputs.java }}
           distribution: 'microsoft'
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build release JAR
-        run: ./gradlew build --no-daemon
+      - name: Build release JARs
+        run: ./gradlew :fabric:build :neoforge:build --no-daemon
 
       - name: Collect distribution JARs
         shell: bash
         run: |
           mkdir -p release
-          for loader in fabric neoforge forge; do
+          for loader in fabric neoforge; do
             directory="$loader/build/libs"
             if [[ -d "$directory" ]]; then
               find "$directory" -maxdepth 1 -type f -name '*.jar' \
@@ -47,7 +50,8 @@ jobs:
                 -exec cp {} release/ \;
             fi
           done
-          test -n "$(find release -maxdepth 1 -type f -name '*.jar' -print -quit)"
+          test -f "release/lazycraft-fabric-${{ steps.project.outputs.minecraft }}-${{ steps.project.outputs.mod }}.jar"
+          test -f "release/lazycraft-neoforge-${{ steps.project.outputs.minecraft }}-${{ steps.project.outputs.mod }}.jar"
           ls -la release
 
       - name: Create GitHub Release

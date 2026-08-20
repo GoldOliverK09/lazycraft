@@ -13,7 +13,13 @@ pluginManagement {
     }
 }
 
+// ModDev Gradle uses Java 21 for its asset downloader, while Minecraft 26.1 itself uses Java 25.
+// This lets Gradle provision that helper toolchain automatically when it is not installed locally.
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
 rootProject.name = 'lazycraft'
 
 includeBuild('build-logic')
-include('common', 'fabric')
+include('common', 'fabric', 'neoforge')

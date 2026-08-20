@@ -1,0 +1,74 @@
+plugins {
+    id 'lazycraft.loader'
+    id 'net.neoforged.moddev'
+}
+
+def commonProject = rootProject.findProject(':common')
+assert commonProject != null
+SourceSetContainer commonSourceSets = commonProject
+        .extensions.getByType(SourceSetContainer)
+def commonMainSourceSet = commonSourceSets.named(SourceSet.MAIN_SOURCE_SET_NAME)
+
+neoForge {
+    version = neoforge_version
+
+    runs {
+        configureEach {
+            ideName = "NeoForge ${it.name.capitalize()} (${project.path})"
+        }
+        client {
+            client()
+            gameDirectory.set(project.layout.projectDirectory.dir('runs/client'))
+        }
+        server {
+            server()
+            gameDirectory.set(project.layout.projectDirectory.dir('runs/server'))
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+dependencies {
+    compileOnly commonProject
+    // Optional at release time, but present in the development client so the shared screen can be tested.
+    implementation "maven.modrinth:9s6osm5g:${cloth_config_neoforge_version}"
+}
+
+// ModDev runs directly from build/classes and build/resources. Compile and copy the shared module
+// into those directories as well as into the final jar, matching the MultiLoader Template behavior.
+tasks.named('compileJava', JavaCompile) {
+    dependsOn commonProject.tasks.named('classes')
+    source commonMainSourceSet.get().java
+}
+
+processResources {
+    dependsOn commonProject.tasks.named('processResources')
+    from(commonMainSourceSet.get().resources)
+}
+
+tasks.named('jar', Jar) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+processResources {
+    def resourceProperties = [
+            version                         : project.version,
+            mod_id                          : mod_id,
+            mod_name                        : mod_name,
+            mod_author                      : mod_author,
+            license                         : license,
+            description                     : project.property('description'),
+            neoforge_loader_version_range   : neoforge_loader_version_range,
+            neoforge_version                : neoforge_version,
+            neoforge_minecraft_version_range: neoforge_minecraft_version_range
+    ]
+    inputs.properties(resourceProperties)
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(resourceProperties)
+    }
+}

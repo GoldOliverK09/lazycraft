@@ -1,0 +1,36 @@
+modLoader = "javafml"
+loaderVersion = "${neoforge_loader_version_range}"
+license = "${license}"
+issueTrackerURL = "https://github.com/GoldOliverK09/lazy-craft/issues"
+
+[[mods]]
+modId = "lazycraft"
+version = "${version}"
+displayName = "${mod_name}"
+logoFile = "assets/lazycraft/icon.png"
+authors = "${mod_author}"
+description = '''${description}'''
+
+[[mixins]]
+config = "lazycraft.client.mixins.json"
+
+[[dependencies.lazycraft]]
+modId = "neoforge"
+type = "required"
+versionRange = "[${neoforge_version},)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.lazycraft]]
+modId = "minecraft"
+type = "required"
+versionRange = "${neoforge_minecraft_version_range}"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.lazycraft]]
+modId = "cloth_config"
+type = "optional"
+versionRange = "*"
+ordering = "NONE"
+side = "CLIENT"

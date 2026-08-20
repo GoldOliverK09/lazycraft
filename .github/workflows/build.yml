@@ -1,6 +1,6 @@
 # Automatically build the project and run any configured tests for every push
 # and submitted pull request. This can help catch issues that only occur on
-# certain platforms or Java versions, and provides a first line of defence
+# certain platforms or Java versions, and provides a first line of defense
 # against bad commits.
 
 name: Build
@@ -22,27 +22,37 @@ jobs:
         uses: actions/checkout@v6
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v6
-      - name: Read required Java version
-        id: java
+      - name: Read project versions
+        id: project
         shell: bash
-        run: echo "version=$(sed -n 's/^java_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "java=$(sed -n 's/^java_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
+          echo "minecraft=$(sed -n 's/^minecraft_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
+          echo "mod=$(sed -n 's/^mod_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
-          java-version: ${{ steps.java.outputs.version }}
+          java-version: ${{ steps.project.outputs.java }}
           distribution: 'microsoft'
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
       - name: Build
         run: ./gradlew build
-      - name: Capture build artifacts
+      - name: Capture Fabric artifact
         uses: actions/upload-artifact@v7
         with:
-          name: mod-jars
+          name: lazycraft-fabric-mc${{ steps.project.outputs.minecraft }}-v${{ steps.project.outputs.mod }}
           path: |
-            fabric/build/libs/*.jar
-            neoforge/build/libs/*.jar
-            forge/build/libs/*.jar
-            !**/*-sources.jar
-            !**/*-javadoc.jar
+            fabric/build/libs/lazycraft-fabric-*.jar
+            !fabric/build/libs/*-sources.jar
+            !fabric/build/libs/*-javadoc.jar
+          if-no-files-found: error
+      - name: Capture NeoForge artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: lazycraft-neoforge-mc${{ steps.project.outputs.minecraft }}-v${{ steps.project.outputs.mod }}
+          path: |
+            neoforge/build/libs/lazycraft-neoforge-*.jar
+            !neoforge/build/libs/*-sources.jar
+            !neoforge/build/libs/*-javadoc.jar
           if-no-files-found: error
