@@ -8,6 +8,7 @@ modId = "lazycraft"
 version = "${version}"
 displayName = "${mod_name}"
 iconFile = "assets/lazycraft/icon.png"
+logoFile = "assets/lazycraft/icon.png"
 authors = "${mod_author}"
 description = '''${description}'''
 
