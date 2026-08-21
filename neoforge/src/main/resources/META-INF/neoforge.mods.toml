@@ -18,7 +18,7 @@ config = "lazycraft.client.mixins.json"
 [[dependencies.lazycraft]]
 modId = "neoforge"
 type = "required"
-versionRange = "[${neoforge_version},)"
+versionRange = "${neoforge_version_range}"
 ordering = "NONE"
 side = "CLIENT"
 
