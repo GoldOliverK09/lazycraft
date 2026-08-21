@@ -24,7 +24,7 @@ jobs:
         shell: bash
         run: |
           echo "java=$(sed -n 's/^java_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
-          echo "minecraft=$(sed -n 's/^minecraft_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
+          echo "minecraft=$(sed -n 's/^minecraft_version_readable=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
           echo "mod=$(sed -n 's/^mod_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
       - name: Set up JDK
         uses: actions/setup-java@v5
