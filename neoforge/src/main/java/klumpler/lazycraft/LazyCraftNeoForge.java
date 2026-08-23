@@ -1,6 +1,6 @@
 package klumpler.lazycraft;
 
-import klumpler.lazycraft.client.command.ShoppingListCommand;
+import klumpler.lazycraft.client.command.ShoppingListCommandNeoForge;
 import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import klumpler.lazycraft.client.integration.LazyCraftNeoForgeConfigIntegration;
 import klumpler.lazycraft.client.planner.CraftingExecutor;
@@ -36,11 +36,11 @@ public final class LazyCraftNeoForge {
     }
 
     private void onRegisterClientCommands(RegisterClientCommandsEvent event) {
-        ShoppingListCommand.register(event.getDispatcher(), event.getBuildContext());
+        ShoppingListCommandNeoForge.register(event.getDispatcher(), event.getBuildContext());
     }
 
     private void onClientStopped(ClientStoppedEvent ignored) {
-        ShoppingListCommand.shutdown();
+        ShoppingListCommandNeoForge.shutdown();
         VisibleRecipeCraftability.shutdown();
     }
 }

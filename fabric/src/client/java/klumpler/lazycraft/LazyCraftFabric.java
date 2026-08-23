@@ -1,6 +1,6 @@
 package klumpler.lazycraft;
 
-import klumpler.lazycraft.client.command.ShoppingListCommand;
+import klumpler.lazycraft.client.command.ShoppingListCommandFabric;
 import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import klumpler.lazycraft.client.planner.CraftingExecutor;
 import klumpler.lazycraft.client.recipebook.VisibleRecipeCraftability;
@@ -18,13 +18,13 @@ public final class LazyCraftFabric implements ClientModInitializer {
                 FabricLoader.getInstance().getConfigDir().resolve(LazyCraft.MOD_ID + ".json")
         );
         LazyCraftConfigManager.load();
-        ClientCommandRegistrationCallback.EVENT.register(ShoppingListCommand::register);
+        ClientCommandRegistrationCallback.EVENT.register(ShoppingListCommandFabric::register);
         ClientTickEvents.END_CLIENT_TICK.register(minecraft -> {
             CraftingExecutor.tick(minecraft);
             VisibleRecipeCraftability.tick(minecraft);
         });
         ClientLifecycleEvents.CLIENT_STOPPING.register(ignored -> {
-            ShoppingListCommand.shutdown();
+            ShoppingListCommandFabric.shutdown();
             VisibleRecipeCraftability.shutdown();
         });
     }

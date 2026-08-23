@@ -17,11 +17,11 @@ neoForge {
             ideName = "NeoForge ${it.name.capitalize()} (${project.path})"
         }
         client {
-            client()
+            client(null)
             gameDirectory.set(project.layout.projectDirectory.dir('runs/client'))
         }
         server {
-            server()
+            server(null)
             gameDirectory.set(project.layout.projectDirectory.dir('runs/server'))
         }
     }

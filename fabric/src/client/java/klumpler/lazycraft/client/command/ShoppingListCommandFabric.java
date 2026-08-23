@@ -17,7 +17,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.*;
 
-public final class ShoppingListCommand {
+public final class ShoppingListCommandFabric {
     private static final ExecutorService PLANNING_EXECUTOR =
             Executors.newSingleThreadExecutor(task -> {
                 Thread thread = new Thread(task, "LazyCraft shopping-list planner");
@@ -30,7 +30,7 @@ public final class ShoppingListCommand {
     private static CompletableFuture<?> currentTask;
     private static boolean shuttingDown;
 
-    private ShoppingListCommand() {
+    private ShoppingListCommandFabric() {
     }
 
     public static void register(
