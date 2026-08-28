@@ -17,7 +17,7 @@ neoForge {
             ideName = "NeoForge ${it.name.capitalize()} (${project.path})"
         }
         client {
-            client()    // Can't use null apparently
+            client()
             gameDirectory.set(project.layout.projectDirectory.dir('runs/client'))
         }
         server {
@@ -34,13 +34,10 @@ neoForge {
 }
 
 dependencies {
-    compileOnly commonProject
-    // Optional at release time, but present in the development client so the shared screen can be tested.
+    compileOnly project(':common')
     implementation "maven.modrinth:9s6osm5g:${cloth_config_neoforge_version}"
 }
 
-// ModDev runs directly from build/classes and build/resources. Compile and copy the shared module
-// into those directories as well as into the final jar, matching the MultiLoader Template behavior.
 tasks.named('compileJava', JavaCompile) {
     dependsOn commonProject.tasks.named('classes')
     source commonMainSourceSet.get().java

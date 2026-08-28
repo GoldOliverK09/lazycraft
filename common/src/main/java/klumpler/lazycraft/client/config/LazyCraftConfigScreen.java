@@ -8,7 +8,7 @@ import net.minecraft.network.chat.Component;
 import java.util.Locale;
 import java.util.Optional;
 
-@SuppressWarnings("unused") // Referenced reflectively by the Fabric and NeoForge optional-config shims.
+@SuppressWarnings("unused")
 public final class LazyCraftConfigScreen {
     private static final String OPTION_KEY_PREFIX = "text.autoconfig.lazycraft.option.";
     private static final String SCORING_MODE_KEY_PREFIX = "text.lazycraft.scoring_mode.";

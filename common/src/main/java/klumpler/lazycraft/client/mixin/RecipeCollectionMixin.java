@@ -29,13 +29,13 @@ public class RecipeCollectionMixin {
             RecipeCollection.CraftableStatus status,
             CallbackInfoReturnable<List<RecipeDisplayEntry>> cir
     ) {
-        if (status != RecipeCollection.CraftableStatus.CRAFTABLE) {
-            return;
-        }
-
         List<RecipeDisplayEntry> vanillaEntries = cir.getReturnValue();
         List<RecipeDisplayEntry> expanded = VisibleRecipeCraftability.includeRecursivelyCraftableEntries(
-                (RecipeCollection) (Object) this, entries, selected, vanillaEntries
+                (RecipeCollection) (Object) this,
+                status,
+                entries,
+                selected,
+                vanillaEntries
         );
         if (expanded != vanillaEntries) {
             cir.setReturnValue(expanded);

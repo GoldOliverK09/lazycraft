@@ -20,6 +20,8 @@ import net.minecraft.world.level.Level;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
 
 public final class VisibleRecipeCraftability {
     private static final ExecutorService PLANNING_EXECUTOR =
@@ -37,6 +39,7 @@ public final class VisibleRecipeCraftability {
     private static Job inFlightJob;
     private static long filterRevision;
     private static int backgroundCooldownTicks;
+    private static boolean environmentDirty;
     private static boolean shuttingDown;
 
     private VisibleRecipeCraftability() {
@@ -45,6 +48,7 @@ public final class VisibleRecipeCraftability {
     public static void beginRefresh() {
         State previousState = activeState;
         refresh = null;
+        environmentDirty = false;
         Environment environment = Environment.capture(Minecraft.getInstance());
         if (environment == null) {
             nextGeneration++;
@@ -131,12 +135,43 @@ public final class VisibleRecipeCraftability {
         return activeState.isRecursivelyCraftable(recipe);
     }
 
+    public static Predicate<RecipeCollection> includeRecursiveCollections(
+            Predicate<RecipeCollection> vanillaFilter
+    ) {
+        return collection -> vanillaFilter.test(collection)
+                && !hasRecursivelyCraftable(collection);
+    }
+
+    public static long refreshFilter(
+            long previousRevision,
+            BooleanSupplier filtering,
+            Runnable updateCollections
+    ) {
+        long currentRevision = filterRevision;
+        if (currentRevision != previousRevision && filtering.getAsBoolean()) {
+            updateCollections.run();
+        }
+        return currentRevision;
+    }
+
+    public static boolean isCraftable(
+            RecipeCollection collection,
+            RecipeDisplayId recipe
+    ) {
+        return collection.hasCraftable() || isRecursivelyCraftable(recipe);
+    }
+
     public static List<RecipeDisplayEntry> includeRecursivelyCraftableEntries(
             RecipeCollection collection,
+            RecipeCollection.CraftableStatus status,
             List<RecipeDisplayEntry> entries,
             Set<RecipeDisplayId> selected,
             List<RecipeDisplayEntry> vanillaEntries
     ) {
+        if (status != RecipeCollection.CraftableStatus.CRAFTABLE) {
+            return vanillaEntries;
+        }
+
         List<RecipeDisplayEntry> expanded = null;
         for (RecipeDisplayEntry entry : entries) {
             RecipeDisplayId recipe = entry.id();
@@ -168,12 +203,21 @@ public final class VisibleRecipeCraftability {
         return filterRevision;
     }
 
+    public static void inventoryChanged() {
+        if (activeState != EMPTY_STATE) {
+            environmentDirty = true;
+        }
+    }
+
     public static void tick(Minecraft minecraft) {
         if (shuttingDown) {
             return;
         }
 
-        revalidateEnvironment(minecraft);
+        if (environmentDirty) {
+            environmentDirty = false;
+            revalidateEnvironment(minecraft);
+        }
         dispatchNextJob();
         if (inFlightJob == null && backgroundCooldownTicks > 0) {
             backgroundCooldownTicks--;
@@ -185,6 +229,7 @@ public final class VisibleRecipeCraftability {
         refresh = null;
         activeState = EMPTY_STATE;
         backgroundCooldownTicks = 0;
+        environmentDirty = false;
         cancelInFlightJob();
         return generation;
     }
@@ -420,8 +465,8 @@ public final class VisibleRecipeCraftability {
                     generation,
                     environment,
                     session,
-                    Map.copyOf(outputByRecipe),
-                    Collections.unmodifiableSet(new LinkedHashSet<>(visibleOutputs)),
+                    Collections.unmodifiableMap(outputByRecipe),
+                    Collections.unmodifiableSet(visibleOutputs),
                     craftableByOutput,
                     createPendingOutputs(visibleOutputs, craftableByOutput)
             );

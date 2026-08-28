@@ -58,7 +58,7 @@ public final class RecipeIndex {
         resolvedSnapshot = new Snapshot(
                 ++nextGeneration,
                 freezeIndex(rebuiltResolvedIndex),
-                Map.copyOf(rebuiltPrimaryOutputs),
+                Collections.unmodifiableMap(rebuiltPrimaryOutputs),
                 List.copyOf(rebuiltOutputOrder)
         );
         LazyCraft.LOGGER.info(
@@ -87,9 +87,8 @@ public final class RecipeIndex {
     }
 
     private static <T> Map<Item, List<T>> freezeIndex(Map<Item, List<T>> index) {
-        Map<Item, List<T>> frozen = new HashMap<>(index.size());
-        index.forEach((item, recipes) -> frozen.put(item, List.copyOf(recipes)));
-        return Map.copyOf(frozen);
+        index.replaceAll((item, recipes) -> List.copyOf(recipes));
+        return Collections.unmodifiableMap(index);
     }
 
     private enum Layout {
@@ -165,7 +164,7 @@ public final class RecipeIndex {
                 List<ItemStack> resultItems,
                 ContextMap context
         ) {
-            Optional<List<Set<Item>>> requirements = resolveRequirements(entry);
+            Optional<List<Set<Item>>> requirements = resolveRequirements(entry, context);
             List<ResolvedOutput> outputs = new ArrayList<>(resultItems.size());
             for (ItemStack stack : resultItems) {
                 if (!stack.isEmpty()) {
@@ -205,7 +204,8 @@ public final class RecipeIndex {
         }
 
         private static Optional<List<Set<Item>>> resolveRequirements(
-                RecipeDisplayEntry entry
+                RecipeDisplayEntry entry,
+                ContextMap context
         ) {
             Optional<List<Ingredient>> ingredients = entry.craftingRequirements();
             if (ingredients.isEmpty()) {
@@ -215,20 +215,22 @@ public final class RecipeIndex {
             List<Ingredient> recipeIngredients = ingredients.get();
             List<Set<Item>> requirements = new ArrayList<>(recipeIngredients.size());
             for (Ingredient ingredient : recipeIngredients) {
-                requirements.add(resolveIngredient(ingredient));
+                requirements.add(resolveIngredient(ingredient, context));
             }
             return Optional.of(List.copyOf(requirements));
         }
 
-        @SuppressWarnings("deprecation") // 26.1 exposes its authoritative holder set here.
-        private static Set<Item> resolveIngredient(Ingredient ingredient) {
+        private static Set<Item> resolveIngredient(
+                Ingredient ingredient,
+                ContextMap context
+        ) {
             Set<Item> acceptedItems = new LinkedHashSet<>();
-            ingredient.items().forEach(holder -> {
-                Item item = holder.value();
+            for (ItemStack stack : ingredient.display().resolveForStacks(context)) {
+                Item item = stack.getItem();
                 if (item != Items.AIR) {
                     acceptedItems.add(item);
                 }
-            });
+            }
             return Collections.unmodifiableSet(acceptedItems);
         }
 

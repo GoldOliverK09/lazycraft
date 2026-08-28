@@ -53,10 +53,12 @@ dependencies {
     clientCompileOnly 'maven.modrinth:mOgUt4GM:njXb639R' // Mod Menu
 }
 
+def modVersion = project.version
+
 processResources {
-    inputs.property 'version', project.version
+    inputs.property 'version', modVersion
     filesMatching('fabric.mod.json') {
-        expand version: project.version
+        expand version: modVersion
     }
 }
 

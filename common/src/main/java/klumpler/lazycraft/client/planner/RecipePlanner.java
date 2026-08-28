@@ -273,18 +273,10 @@ public final class RecipePlanner {
             };
         }
 
-        private static long ingredientCost(List<Set<Item>> requirements, int crafts) {
-            return Math.multiplyExact((long) requirements.size(), crafts);
-        }
-
         private static void ensureNotCancelled(BooleanSupplier cancellation) {
             if (Thread.currentThread().isInterrupted() || cancellation.getAsBoolean()) {
                 throw new CancellationException();
             }
-        }
-
-        private static int divideRoundUp(int dividend, int divisor) {
-            return dividend / divisor + (dividend % divisor == 0 ? 0 : 1);
         }
 
         private List<SearchResult> produce(
@@ -378,7 +370,7 @@ public final class RecipePlanner {
                     }
                 }
 
-                int crafts = divideRoundUp(quantity, outputCount);
+                int crafts = Math.ceilDiv(quantity, outputCount);
                 long producedCount = Math.multiplyExact((long) outputCount, crafts);
                 long overproduction = producedCount - quantity;
                 List<SearchResult> satisfiedRequirements = satisfyRequirements(
@@ -397,7 +389,7 @@ public final class RecipePlanner {
                             recipe,
                             item,
                             crafts,
-                            ingredientCost(requirements, crafts),
+                            Math.multiplyExact((long) requirements.size(), crafts),
                             overproduction,
                             depth + 1,
                             craftedInventory,

@@ -1,11 +1,14 @@
 package klumpler.lazycraft.client.recipebook;
 
+import klumpler.lazycraft.client.config.LazyCraftConfig;
+import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import klumpler.lazycraft.client.planner.CraftingExecutor;
 import klumpler.lazycraft.client.planner.RecipePlanner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import net.minecraft.util.context.ContextMap;
 import net.minecraft.world.inventory.AbstractCraftingMenu;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.display.RecipeDisplay;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
@@ -16,6 +19,68 @@ import java.util.function.Consumer;
 
 public final class RecipeBookCrafting {
     private RecipeBookCrafting() {
+    }
+
+    public static boolean tryPlaceRecipe(
+            RecipeCollection recipeCollection,
+            RecipeDisplayId recipe,
+            RecipeDisplayId lastPlacedRecipe,
+            boolean hasGhostRecipe,
+            Consumer<RecipeDisplay> restoreGhostRecipe,
+            Runnable clearGhostRecipe
+    ) {
+        LazyCraftConfig config = LazyCraftConfigManager.get();
+        if (!config.recipeBookCrafting || CraftingExecutor.isExecuting()) {
+            return false;
+        }
+
+        if (recipeCollection.isCraftable(recipe)) {
+            return recipe.equals(lastPlacedRecipe)
+                    && !hasGhostRecipe
+                    && takePlacedResultToInventory(recipeCollection, recipe);
+        }
+        if (!config.recursiveRecipeBookCrafting
+                || !recipe.equals(lastPlacedRecipe)
+                || !hasGhostRecipe
+                || !executePlan(recipeCollection, recipe, false, restoreGhostRecipe)) {
+            return false;
+        }
+
+        clearGhostRecipe.run();
+        return true;
+    }
+
+    public static boolean tryTakeGhostResult(
+            Slot slot,
+            RecipeDisplayId lastPlacedRecipe,
+            RecipeCollection lastRecipeCollection,
+            boolean hasGhostRecipe,
+            Consumer<RecipeDisplay> restoreGhostRecipe,
+            Runnable clearGhostRecipe
+    ) {
+        Minecraft minecraft = Minecraft.getInstance();
+        LazyCraftConfig config = LazyCraftConfigManager.get();
+        if (!config.recipeBookCrafting
+                || !config.recursiveRecipeBookCrafting
+                || CraftingExecutor.isExecuting()
+                || !hasGhostRecipe
+                || lastPlacedRecipe == null
+                || lastRecipeCollection == null
+                || minecraft.player == null
+                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
+                || slot != menu.getResultSlot()
+                || !slot.getItem().isEmpty()
+                || !executePlan(
+                lastRecipeCollection,
+                lastPlacedRecipe,
+                true,
+                restoreGhostRecipe
+        )) {
+            return false;
+        }
+
+        clearGhostRecipe.run();
+        return true;
     }
 
     public static boolean executePlan(

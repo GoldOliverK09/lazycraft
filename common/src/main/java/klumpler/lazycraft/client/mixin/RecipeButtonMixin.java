@@ -37,7 +37,6 @@ public abstract class RecipeButtonMixin {
             )
     )
     private boolean lazycraft$showRecursiveCraftability(RecipeCollection collection) {
-        return collection.hasCraftable()
-                || VisibleRecipeCraftability.isRecursivelyCraftable(getCurrentRecipe());
+        return VisibleRecipeCraftability.isCraftable(collection, getCurrentRecipe());
     }
 }

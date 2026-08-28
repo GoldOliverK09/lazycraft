@@ -25,36 +25,33 @@ final class PlanningInventory {
         List<Slot> inputSlots = player.containerMenu instanceof AbstractCraftingMenu menu
                 ? menu.getInputGridSlots()
                 : List.of();
-        Item[] items = new Item[inventorySize + inputSlots.size() + 1];
-        int[] counts = new int[items.length];
-        int size = 0;
+        int capacity = inventorySize + inputSlots.size() + 1;
+        PlanningInventory inventory = new PlanningInventory(
+                new Item[capacity],
+                new int[capacity],
+                0
+        );
 
         for (int slot = 0; slot < inventorySize; slot++) {
             ItemStack stack = player.getInventory().getItem(slot);
             if (!stack.isEmpty()) {
-                items[size] = stack.getItem();
-                counts[size] = stack.getCount();
-                size++;
+                inventory.add(stack.getItem(), stack.getCount());
             }
         }
 
         for (Slot slot : inputSlots) {
             ItemStack stack = slot.getItem();
             if (!stack.isEmpty()) {
-                items[size] = stack.getItem();
-                counts[size] = stack.getCount();
-                size++;
+                inventory.add(stack.getItem(), stack.getCount());
             }
         }
 
         ItemStack carried = player.containerMenu.getCarried();
         if (!carried.isEmpty()) {
-            items[size] = carried.getItem();
-            counts[size] = carried.getCount();
-            size++;
+            inventory.add(carried.getItem(), carried.getCount());
         }
 
-        return new PlanningInventory(items, counts, size);
+        return inventory;
     }
 
     Map<Item, Integer> itemCounts() {
@@ -62,7 +59,7 @@ final class PlanningInventory {
         for (int index = 0; index < size; index++) {
             itemCounts.merge(items[index], counts[index], Math::addExact);
         }
-        return Map.copyOf(itemCounts);
+        return Collections.unmodifiableMap(itemCounts);
     }
 
     PlanningInventory copy() {
@@ -88,6 +85,13 @@ final class PlanningInventory {
         Objects.requireNonNull(item, "item cannot be null");
         if (count <= 0) {
             return;
+        }
+
+        for (int index = size - 1; index >= 0; index--) {
+            if (items[index] == item) {
+                counts[index] = Math.addExact(counts[index], count);
+                return;
+            }
         }
 
         ensureCapacity(size + 1);

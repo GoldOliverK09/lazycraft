@@ -11,6 +11,8 @@ import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.display.*;
 
@@ -87,7 +89,10 @@ public final class CraftingExecutor {
     }
 
     private static boolean executeQueuedCrafts(List<QueuedCraft> craftsToQueue, Runnable onComplete) {
-        if (activeCraft != null || !queuedCrafts.isEmpty() || craftsToQueue.isEmpty()) {
+        if (directCraft != null
+                || activeCraft != null
+                || !queuedCrafts.isEmpty()
+                || craftsToQueue.isEmpty()) {
             return false;
         }
 
@@ -272,8 +277,7 @@ public final class CraftingExecutor {
             return;
         }
 
-        if (recipeMayReturnIngredients(active.step.recipe())
-                || hasCraftingRemainder(menu)) {
+        if (hasCraftingRemainder(menu)) {
             active.batchEnabled = false;
             takeResult(minecraft, active, menu);
             return;
@@ -516,16 +520,15 @@ public final class CraftingExecutor {
     }
 
     private static boolean hasCraftingRemainder(AbstractCraftingMenu menu) {
-        for (Slot slot : menu.getInputGridSlots()) {
-            ItemStack stack = slot.getItem();
-            if (!stack.isEmpty() && stack.getItem().getCraftingRemainder() != null) {
-                return true;
-            }
-        }
-        return false;
+        CraftingInput input = CraftingInput.of(
+                menu.getGridWidth(),
+                menu.getGridHeight(),
+                menu.getInputGridSlots().stream().map(Slot::getItem).toList()
+        );
+        return CraftingRecipe.defaultCraftingReminder(input).stream()
+                .anyMatch(stack -> !stack.isEmpty());
     }
 
-    @SuppressWarnings("deprecation") // 26.1 exposes each ingredient's authoritative holder set here.
     private static boolean recipeMayReturnIngredients(RecipeDisplayEntry recipe) {
         if (recipeDisplayHasRemainder(recipe.display())) {
             return true;
@@ -536,7 +539,7 @@ public final class CraftingExecutor {
             return true;
         }
         for (Ingredient ingredient : requirements.get()) {
-            if (ingredient.items().anyMatch(holder -> holder.value().getCraftingRemainder() != null)) {
+            if (slotDisplayHasRemainder(ingredient.display())) {
                 return true;
             }
         }
@@ -745,7 +748,8 @@ public final class CraftingExecutor {
             this.remainingCrafts = remainingCrafts;
             this.takeResultToCursor = takeResultToCursor;
             this.batchEnabled = remainingCrafts > 1
-                    && !takeResultToCursor;
+                    && !takeResultToCursor
+                    && !recipeMayReturnIngredients(step.recipe());
         }
     }
 }

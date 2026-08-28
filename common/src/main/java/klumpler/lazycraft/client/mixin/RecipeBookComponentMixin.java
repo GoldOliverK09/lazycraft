@@ -1,15 +1,10 @@
 package klumpler.lazycraft.client.mixin;
 
-import klumpler.lazycraft.client.config.LazyCraftConfig;
-import klumpler.lazycraft.client.config.LazyCraftConfigManager;
-import klumpler.lazycraft.client.planner.CraftingExecutor;
 import klumpler.lazycraft.client.recipebook.RecipeBookCrafting;
 import klumpler.lazycraft.client.recipebook.VisibleRecipeCraftability;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.recipebook.GhostSlots;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
-import net.minecraft.world.inventory.AbstractCraftingMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.crafting.display.RecipeDisplay;
 import net.minecraft.world.item.crafting.display.RecipeDisplayId;
@@ -62,21 +57,16 @@ public class RecipeBookComponentMixin {
     private Predicate<RecipeCollection> lazycraft$includeRecursiveCollections(
             Predicate<RecipeCollection> vanillaFilter
     ) {
-        return collection -> vanillaFilter.test(collection)
-                && !VisibleRecipeCraftability.hasRecursivelyCraftable(collection);
+        return VisibleRecipeCraftability.includeRecursiveCollections(vanillaFilter);
     }
 
     @Inject(method = "tick", at = @At("TAIL"))
     private void lazycraft$refreshRecursiveFilter(CallbackInfo ci) {
-        long currentRevision = VisibleRecipeCraftability.filterRevision();
-        if (currentRevision == lazycraft$filterRevision) {
-            return;
-        }
-
-        lazycraft$filterRevision = currentRevision;
-        if (isFiltering()) {
-            updateCollections(false, true);
-        }
+        lazycraft$filterRevision = VisibleRecipeCraftability.refreshFilter(
+                lazycraft$filterRevision,
+                this::isFiltering,
+                () -> updateCollections(false, true)
+        );
     }
 
     @Inject(method = "tryPlaceRecipe", at = @At("HEAD"), cancellable = true)
@@ -86,71 +76,30 @@ public class RecipeBookComponentMixin {
             boolean useMaxItems,
             CallbackInfoReturnable<Boolean> cir
     ) {
-        LazyCraftConfig config = LazyCraftConfigManager.get();
-        if (!config.recipeBookCrafting || CraftingExecutor.isExecuting()) {
-            return;
-        }
-
-        if (recipeCollection.isCraftable(recipe)) {
-            if (lazycraft$craftPlacedVanillaRecipe(recipeCollection, recipe)) {
-                cir.setReturnValue(true);
-            }
-            return;
-        }
-
-        if (!config.recursiveRecipeBookCrafting) {
-            return;
-        }
-
-        // The first click is handled by vanilla and displays the ghost recipe.
-        // Further clicks on it confirm LazyCraft's recursive crafting action.
-        if (!recipe.equals(lastPlacedRecipe) || !lazycraft$hasGhostRecipe()) {
-            return;
-        }
-
-        if (RecipeBookCrafting.executePlan(
-                recipeCollection, recipe, false, this::lazycraft$restoreGhostRecipe
+        if (RecipeBookCrafting.tryPlaceRecipe(
+                recipeCollection,
+                recipe,
+                lastPlacedRecipe,
+                lazycraft$hasGhostRecipe(),
+                this::lazycraft$restoreGhostRecipe,
+                ghostSlots::clear
         )) {
-            ghostSlots.clear();
             cir.setReturnValue(true);
         }
     }
 
     @Inject(method = "slotClicked", at = @At("HEAD"), cancellable = true)
     private void lazycraft$executeGhostOutput(Slot slot, CallbackInfo ci) {
-        Minecraft minecraft = Minecraft.getInstance();
-        LazyCraftConfig config = LazyCraftConfigManager.get();
-        if (!config.recipeBookCrafting
-                || !config.recursiveRecipeBookCrafting
-                || CraftingExecutor.isExecuting()
-                || !lazycraft$hasGhostRecipe()
-                || lastPlacedRecipe == null
-                || lastRecipeCollection == null
-                || minecraft.player == null
-                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
-                || slot != menu.getResultSlot()
-                || !slot.getItem().isEmpty()) {
-            return;
-        }
-
-        if (RecipeBookCrafting.executePlan(
-                lastRecipeCollection, lastPlacedRecipe, true, this::lazycraft$restoreGhostRecipe
+        if (RecipeBookCrafting.tryTakeGhostResult(
+                slot,
+                lastPlacedRecipe,
+                lastRecipeCollection,
+                lazycraft$hasGhostRecipe(),
+                this::lazycraft$restoreGhostRecipe,
+                ghostSlots::clear
         )) {
-            ghostSlots.clear();
             ci.cancel();
         }
-    }
-
-    @Unique
-    private boolean lazycraft$craftPlacedVanillaRecipe(
-            RecipeCollection recipeCollection,
-            RecipeDisplayId recipe
-    ) {
-        if (!recipe.equals(lastPlacedRecipe) || lazycraft$hasGhostRecipe()) {
-            return false;
-        }
-
-        return RecipeBookCrafting.takePlacedResultToInventory(recipeCollection, recipe);
     }
 
     @Unique
