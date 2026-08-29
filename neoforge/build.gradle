@@ -1,34 +1,45 @@
+import net.neoforged.moddevgradle.dsl.ModModel
+import net.neoforged.moddevgradle.dsl.RunModel
+
 plugins {
     id 'lazycraft.loader'
     id 'net.neoforged.moddev'
 }
 
+def neoForgeProjectPath = path
+def clientGameDirectory = layout.projectDirectory.dir('runs/client')
+def serverGameDirectory = layout.projectDirectory.dir('runs/server')
 def commonProject = rootProject.findProject(':common')
 assert commonProject != null
 SourceSetContainer commonSourceSets = commonProject
         .extensions.getByType(SourceSetContainer)
 def commonMainSourceSet = commonSourceSets.named(SourceSet.MAIN_SOURCE_SET_NAME)
+def neoForgeMainSourceSet = sourceSets.named(SourceSet.MAIN_SOURCE_SET_NAME)
 
 neoForge {
     version = neoforge_version
 
     runs {
-        configureEach {
-            ideName = "NeoForge ${it.name.capitalize()} (${project.path})"
+        configureEach { RunModel run ->
+            run.ideName.set(
+                    "NeoForge ${run.name.capitalize()} (${neoForgeProjectPath})"
+            )
         }
-        client {
-            client()
-            gameDirectory.set(project.layout.projectDirectory.dir('runs/client'))
+
+        client { RunModel run ->
+            run.client()
+            run.gameDirectory.set(clientGameDirectory)
         }
-        server {
-            server()
-            gameDirectory.set(project.layout.projectDirectory.dir('runs/server'))
+
+        server { RunModel run ->
+            run.server()
+            run.gameDirectory.set(serverGameDirectory)
         }
     }
 
     mods {
-        "${mod_id}" {
-            sourceSet sourceSets.main
+        "${mod_id}" { ModModel mod ->
+            mod.sourceSet(neoForgeMainSourceSet.get())
         }
     }
 }
@@ -43,16 +54,13 @@ tasks.named('compileJava', JavaCompile) {
     source commonMainSourceSet.get().java
 }
 
-processResources {
-    dependsOn commonProject.tasks.named('processResources')
-    from(commonMainSourceSet.get().resources)
-}
-
 tasks.named('jar', Jar) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
-processResources {
+tasks.named('processResources', ProcessResources) {
+    from(commonProject.tasks.named('processResources'))
+
     def resourceProperties = [
             version                         : project.version,
             mod_id                          : mod_id,

@@ -3,15 +3,15 @@ plugins {
     id 'lazycraft.loader'
 }
 
-def commonBuildOutput = rootProject.layout.projectDirectory.dir('common/build')
+def commonProject = rootProject.project(':common')
+SourceSetContainer commonSourceSets = commonProject
+        .extensions.getByType(SourceSetContainer)
+def commonMainSourceSet = commonSourceSets.named(SourceSet.MAIN_SOURCE_SET_NAME)
 
 loom {
     splitEnvironmentSourceSets()
 
-    SourceSetContainer commonSourceSets = rootProject.project(':common')
-            .extensions.getByType(SourceSetContainer)
     SourceSetContainer fabricSourceSets = project.extensions.getByType(SourceSetContainer)
-    def commonMainSourceSet = commonSourceSets.named(SourceSet.MAIN_SOURCE_SET_NAME)
     def fabricMainSourceSet = fabricSourceSets.named(SourceSet.MAIN_SOURCE_SET_NAME)
     def fabricClientSourceSet = fabricSourceSets.named('client')
 
@@ -45,10 +45,7 @@ dependencies {
     implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
     clientCompileOnly project(':common')
     compileOnly project(':common')
-    clientRuntimeOnly files(
-            commonBuildOutput.dir('classes/java/main'),
-            commonBuildOutput.dir('resources/main')
-    )
+    clientRuntimeOnly commonMainSourceSet.get().output
     clientCompileOnly "maven.modrinth:9s6osm5g:${cloth_config_fabric_version}" // Cloth Config API
     clientCompileOnly 'maven.modrinth:mOgUt4GM:njXb639R' // Mod Menu
 }
