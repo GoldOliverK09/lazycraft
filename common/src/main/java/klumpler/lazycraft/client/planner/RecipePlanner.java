@@ -5,6 +5,7 @@ import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.crafting.display.RecipeDisplayId;
 
 import java.util.*;
 import java.util.concurrent.CancellationException;
@@ -25,6 +26,20 @@ public final class RecipePlanner {
         CraftingGrid craftingGrid = CraftingGrid.current().orElse(CraftingGrid.CRAFTING_TABLE);
         return captureSession(PlanningInventory.from(player), currentSettings(craftingGrid))
                 .flatMap(session -> session.plan(target, 1, () -> false));
+    }
+
+    public static Optional<CraftPlan> plan(Item target, RecipeDisplayId finalRecipe) {
+        Objects.requireNonNull(target, "target cannot be null");
+        Objects.requireNonNull(finalRecipe, "finalRecipe cannot be null");
+        Minecraft minecraft = Minecraft.getInstance();
+        Player player = minecraft.player;
+        if (player == null || minecraft.level == null) {
+            return Optional.empty();
+        }
+
+        CraftingGrid craftingGrid = CraftingGrid.current().orElse(CraftingGrid.CRAFTING_TABLE);
+        return captureSession(PlanningInventory.from(player), currentSettings(craftingGrid))
+                .flatMap(session -> session.plan(target, finalRecipe, 1, () -> false));
     }
 
     public static Optional<PlanningSession> createShoppingSession(Player player) {
@@ -140,12 +155,40 @@ public final class RecipePlanner {
                     : Optional.of(new CraftPlan(results.getFirst().steps()));
         }
 
+        public Optional<CraftPlan> plan(
+                Item target,
+                RecipeDisplayId finalRecipe,
+                int quantity,
+                BooleanSupplier cancellation
+        ) {
+            Objects.requireNonNull(finalRecipe, "finalRecipe cannot be null");
+            List<SearchResult> results = search(
+                    target,
+                    finalRecipe,
+                    quantity,
+                    cancellation,
+                    true
+            );
+            return results.isEmpty()
+                    ? Optional.empty()
+                    : Optional.of(new CraftPlan(results.getFirst().steps()));
+        }
+
         public boolean canPlan(
                 Item target,
                 int quantity,
                 BooleanSupplier cancellation
         ) {
             return !search(target, quantity, cancellation, false).isEmpty();
+        }
+
+        public boolean canPlan(
+                Item target,
+                RecipeDisplayId finalRecipe,
+                int quantity,
+                BooleanSupplier cancellation
+        ) {
+            return !search(target, finalRecipe, quantity, cancellation, false).isEmpty();
         }
 
         public Optional<ShoppingList> shoppingList(
@@ -214,6 +257,38 @@ public final class RecipePlanner {
             );
             search.ensureNotCancelled();
             return search.produce(target, quantity, inventory, new HashSet<>(), 0);
+        }
+
+        private List<SearchResult> search(
+                Item target,
+                RecipeDisplayId finalRecipe,
+                int quantity,
+                BooleanSupplier cancellation,
+                boolean collectSteps
+        ) {
+            Objects.requireNonNull(target, "target cannot be null");
+            Objects.requireNonNull(finalRecipe, "finalRecipe cannot be null");
+            Objects.requireNonNull(cancellation, "cancellation cannot be null");
+            if (quantity <= 0) {
+                throw new IllegalArgumentException("quantity must be positive");
+            }
+
+            SearchContext search = SearchContext.create(
+                    settings,
+                    recipeIndex,
+                    cancellation,
+                    collectSteps,
+                    false
+            );
+            search.ensureNotCancelled();
+            return search.produceUsingRecipe(
+                    target,
+                    finalRecipe,
+                    quantity,
+                    inventory,
+                    new HashSet<>(),
+                    0
+            );
         }
     }
 
@@ -306,6 +381,35 @@ public final class RecipePlanner {
             }
         }
 
+        private List<SearchResult> produceUsingRecipe(
+                Item item,
+                RecipeDisplayId recipe,
+                int quantity,
+                PlanningInventory inventory,
+                Set<Item> path,
+                int depth
+        ) {
+            ensureNotCancelled();
+            if (depth >= maxSearchDepth || !path.add(item)) {
+                return List.of();
+            }
+
+            try {
+                return produceRecipeCandidates(
+                        item,
+                        quantity,
+                        inventory,
+                        path,
+                        depth,
+                        RequirementMode.CRAFTABLE,
+                        RawRecipeFilter.ALL,
+                        recipe
+                );
+            } finally {
+                path.remove(item);
+            }
+        }
+
         private List<SearchResult> produceIngredientList(
                 Item item,
                 int quantity,
@@ -342,9 +446,34 @@ public final class RecipePlanner {
                 RequirementMode requirementMode,
                 RawRecipeFilter rawRecipeFilter
         ) {
+            return produceRecipeCandidates(
+                    item,
+                    quantity,
+                    inventory,
+                    path,
+                    depth,
+                    requirementMode,
+                    rawRecipeFilter,
+                    null
+            );
+        }
+
+        private List<SearchResult> produceRecipeCandidates(
+                Item item,
+                int quantity,
+                PlanningInventory inventory,
+                Set<Item> path,
+                int depth,
+                RequirementMode requirementMode,
+                RawRecipeFilter rawRecipeFilter,
+                RecipeDisplayId requiredRecipe
+        ) {
             StableTopK<SearchResult> candidates = bestCandidates();
             for (RecipeIndex.ResolvedRecipe recipe : recipeIndex.recipesProducing(item)) {
                 ensureNotCancelled();
+                if (requiredRecipe != null && !recipe.entry().id().equals(requiredRecipe)) {
+                    continue;
+                }
                 if (!recipe.supports(craftingGrid)) {
                     continue;
                 }

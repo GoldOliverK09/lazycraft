@@ -37,7 +37,7 @@ public final class RecipeBookCrafting {
         if (recipeCollection.isCraftable(recipe)) {
             return recipe.equals(lastPlacedRecipe)
                     && !hasGhostRecipe
-                    && takePlacedResultToInventory(recipeCollection, recipe);
+                    && takePlacedResultsToInventory(recipeCollection, recipe);
         }
         if (!config.recursiveRecipeBookCrafting
                 || !recipe.equals(lastPlacedRecipe)
@@ -106,14 +106,14 @@ public final class RecipeBookCrafting {
         }
 
         Runnable restoreRecipe = () -> restoreGhostRecipe.accept(entry.display());
-        return RecipePlanner.plan(result.getItem())
+        return RecipePlanner.plan(result.getItem(), entry.id())
                 .map(plan -> takeResultToCursor
                         ? CraftingExecutor.executeToCursor(plan, restoreRecipe)
                         : CraftingExecutor.execute(plan, restoreRecipe))
                 .orElse(false);
     }
 
-    public static boolean takePlacedResultToInventory(
+    public static boolean takePlacedResultsToInventory(
             RecipeCollection recipeCollection,
             RecipeDisplayId recipe
     ) {
@@ -139,7 +139,7 @@ public final class RecipeBookCrafting {
             return false;
         }
 
-        return CraftingExecutor.takePlacedResultToInventory(result);
+        return CraftingExecutor.takePlacedResultsToInventory(result);
     }
 
     private static RecipeDisplayEntry findRecipeEntry(

@@ -5,7 +5,6 @@ import klumpler.lazycraft.client.config.LazyCraftConfig;
 import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractCraftingMenu;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
@@ -37,7 +36,7 @@ public final class CraftingExecutor {
         return executePlan(plan, onComplete, true);
     }
 
-    public static boolean takePlacedResultToInventory(ItemStack expectedResult) {
+    public static boolean takePlacedResultsToInventory(ItemStack expectedResult) {
         Objects.requireNonNull(expectedResult, "expectedResult cannot be null");
         if (isExecuting()) {
             return false;
@@ -46,8 +45,7 @@ public final class CraftingExecutor {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null
                 || minecraft.gameMode == null
-                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
-                || !menu.getCarried().isEmpty()) {
+                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
             return false;
         }
 
@@ -58,13 +56,31 @@ public final class CraftingExecutor {
             return false;
         }
 
+        ResultDestination destination;
+        if (availableInventoryCapacity(minecraft, result) >= result.getCount()) {
+            destination = ResultDestination.INVENTORY;
+        } else if (canCursorAccept(menu.getCarried(), result)) {
+            destination = ResultDestination.CURSOR;
+        } else {
+            return false;
+        }
+
         executionUpdateTimeoutTicks = LazyCraftConfigManager.get().serverUpdateTimeoutTicks;
-        directCraft = new DirectCraft(menu.containerId, result.copy(), menu.getStateId());
+        directCraft = new DirectCraft(
+                menu.containerId,
+                result.copy(),
+                destination,
+                countInventoryStack(minecraft, result),
+                menu.getCarried().copy(),
+                menu.getStateId()
+        );
         minecraft.gameMode.handleContainerInput(
                 menu.containerId,
                 menu.getResultSlot().index,
                 0,
-                ContainerInput.PICKUP,
+                destination == ResultDestination.INVENTORY
+                        ? ContainerInput.QUICK_MOVE
+                        : ContainerInput.PICKUP,
                 minecraft.player
         );
         return true;
@@ -174,7 +190,11 @@ public final class CraftingExecutor {
         switch (activeCraft.phase) {
             case WAITING_FOR_PLACEMENT -> handleInitialPlacement(minecraft, activeCraft, menu);
             case WAITING_FOR_BATCH_PLACEMENT -> handleBatchPlacement(minecraft, activeCraft, menu);
-            case WAITING_FOR_CRAFT -> finishCrafts(minecraft, activeCraft, menu, 1);
+            case WAITING_FOR_CRAFT -> {
+                if (hasStoredCraftResult(minecraft, activeCraft, menu)) {
+                    finishCrafts(minecraft, activeCraft, menu, 1);
+                }
+            }
             case WAITING_FOR_BATCH_CRAFT -> finishBatchCraft(minecraft, activeCraft, menu);
         }
     }
@@ -201,39 +221,30 @@ public final class CraftingExecutor {
             return;
         }
 
-        if (directCraft.phase == DirectCraftPhase.WAITING_FOR_RESULT) {
-            ItemStack carried = menu.getCarried();
-            if (!ItemStack.isSameItemSameComponents(carried, directCraft.result)
-                    || carried.getCount() != directCraft.result.getCount()) {
-                stop("the server returned an unexpected direct-craft result");
+        if (directCraft.destination == ResultDestination.INVENTORY) {
+            long storedItems = countInventoryStack(minecraft, directCraft.result);
+            if (storedItems < directCraft.inventoryItemsBefore + directCraft.result.getCount()) {
                 return;
             }
-
-            Slot destination = findInventoryDestination(minecraft, menu, carried);
-            if (destination == null) {
-                stop("there was no inventory space for " + itemName(directCraft.result.getItem()));
-                return;
-            }
-
-            directCraft.phase = DirectCraftPhase.WAITING_FOR_INVENTORY;
-            directCraft.expectedStateId = menu.getStateId();
-            directCraft.ticksWaiting = 0;
-            minecraft.gameMode.handleContainerInput(
-                    menu.containerId,
-                    destination.index,
-                    0,
-                    ContainerInput.PICKUP,
-                    minecraft.player
-            );
+            finishDirectCraft("inventory");
             return;
         }
 
-        if (!menu.getCarried().isEmpty()) {
-            stop("the server could not store " + itemName(directCraft.result.getItem()));
+        ItemStack carried = menu.getCarried();
+        if (!ItemStack.isSameItemSameComponents(carried, directCraft.result)
+                || carried.getCount() != directCraft.carriedBefore.getCount()
+                + directCraft.result.getCount()) {
             return;
         }
+        finishDirectCraft("cursor");
+    }
 
-        LazyCraft.LOGGER.debug("Finished direct crafting {}", itemName(directCraft.result.getItem()));
+    private static void finishDirectCraft(String destination) {
+        LazyCraft.LOGGER.debug(
+                "Finished direct crafting {} to {}",
+                itemName(directCraft.result.getItem()),
+                destination
+        );
         directCraft = null;
     }
 
@@ -262,7 +273,6 @@ public final class CraftingExecutor {
             AbstractCraftingMenu menu
     ) {
         if (!hasExpectedResult(active, menu)) {
-            stop("the server could not place " + itemName(active.step.output()));
             return;
         }
 
@@ -272,7 +282,10 @@ public final class CraftingExecutor {
         }
 
         int stagedCrafts = uniformStagedCrafts(menu);
-        if (stagedCrafts != 1) {
+        if (stagedCrafts < 1) {
+            return;
+        }
+        if (stagedCrafts > 1) {
             stop("the server placed an unexpected initial recipe amount");
             return;
         }
@@ -301,12 +314,14 @@ public final class CraftingExecutor {
             AbstractCraftingMenu menu
     ) {
         if (!hasExpectedResult(active, menu)) {
-            stop("the server stopped matching the staged recipe");
             return;
         }
 
         int stagedCrafts = uniformStagedCrafts(menu);
-        if (stagedCrafts != active.expectedStagedCrafts) {
+        if (stagedCrafts < active.expectedStagedCrafts) {
+            return;
+        }
+        if (stagedCrafts > active.expectedStagedCrafts) {
             stop("the server staged an unexpected recipe amount");
             return;
         }
@@ -349,6 +364,22 @@ public final class CraftingExecutor {
             return;
         }
 
+        ItemStack result = menu.getResultSlot().getItem().copy();
+        ResultDestination destination = chooseResultDestination(
+                minecraft,
+                menu,
+                result,
+                active.takeResultToCursor
+        );
+        if (destination == null) {
+            stop("there was no cursor or inventory space for " + itemName(active.step.output()));
+            return;
+        }
+
+        active.resultDestination = destination;
+        active.singleCraftOutput = result;
+        active.carriedBeforeCraft = menu.getCarried().copy();
+        active.outputItemsBeforeCraft = countInventoryStack(minecraft, result);
         waitForMenuUpdate(active, Phase.WAITING_FOR_CRAFT, menu);
         assert minecraft.gameMode != null;
         assert minecraft.player != null;
@@ -356,9 +387,66 @@ public final class CraftingExecutor {
                 menu.containerId,
                 menu.getResultSlot().index,
                 0,
-                active.takeResultToCursor ? ContainerInput.PICKUP : ContainerInput.QUICK_MOVE,
+                destination == ResultDestination.CURSOR
+                        ? ContainerInput.PICKUP
+                        : ContainerInput.QUICK_MOVE,
                 minecraft.player
         );
+    }
+
+    private static ResultDestination chooseResultDestination(
+            Minecraft minecraft,
+            AbstractCraftingMenu menu,
+            ItemStack result,
+            boolean preferCursor
+    ) {
+        boolean cursorAvailable = canCursorAccept(menu.getCarried(), result);
+        boolean inventoryAvailable = availableInventoryCapacity(minecraft, result)
+                >= result.getCount();
+
+        if (preferCursor) {
+            if (cursorAvailable) {
+                return ResultDestination.CURSOR;
+            }
+            if (inventoryAvailable) {
+                return ResultDestination.INVENTORY;
+            }
+        } else {
+            if (inventoryAvailable) {
+                return ResultDestination.INVENTORY;
+            }
+            if (cursorAvailable) {
+                return ResultDestination.CURSOR;
+            }
+        }
+        return null;
+    }
+
+    private static boolean canCursorAccept(ItemStack carried, ItemStack result) {
+        if (carried.isEmpty()) {
+            return true;
+        }
+        return ItemStack.isSameItemSameComponents(carried, result)
+                && result.getCount() <= carried.getMaxStackSize() - carried.getCount();
+    }
+
+    private static boolean hasStoredCraftResult(
+            Minecraft minecraft,
+            ActiveCraft active,
+            AbstractCraftingMenu menu
+    ) {
+        if (active.resultDestination == ResultDestination.INVENTORY) {
+            return countInventoryStack(minecraft, active.singleCraftOutput)
+                    >= active.outputItemsBeforeCraft + active.singleCraftOutput.getCount();
+        }
+        if (active.resultDestination != ResultDestination.CURSOR) {
+            return false;
+        }
+
+        ItemStack carried = menu.getCarried();
+        return ItemStack.isSameItemSameComponents(carried, active.singleCraftOutput)
+                && carried.getCount() == active.carriedBeforeCraft.getCount()
+                + active.singleCraftOutput.getCount();
     }
 
     private static void takeBatchResult(
@@ -399,7 +487,10 @@ public final class CraftingExecutor {
                 (long) active.pendingBatchCrafts,
                 active.outputItemsPerCraft
         );
-        if (outputIncrease != expectedIncrease) {
+        if (outputIncrease < expectedIncrease) {
+            return;
+        }
+        if (outputIncrease > expectedIncrease) {
             stop("the server completed an unexpected number of staged crafts");
             return;
         }
@@ -613,36 +704,6 @@ public final class CraftingExecutor {
         return count;
     }
 
-    private static Slot findInventoryDestination(
-            Minecraft minecraft,
-            AbstractCraftingMenu menu,
-            ItemStack carried
-    ) {
-        assert minecraft.player != null;
-        Inventory inventory = minecraft.player.getInventory();
-        int storageSlots = inventory.getNonEquipmentItems().size();
-        Slot emptySlot = null;
-
-        for (Slot slot : menu.slots) {
-            if (slot.container != inventory
-                    || slot.getContainerSlot() >= storageSlots
-                    || !slot.mayPlace(carried)) {
-                continue;
-            }
-
-            ItemStack existing = slot.getItem();
-            if (existing.isEmpty()) {
-                if (emptySlot == null) {
-                    emptySlot = slot;
-                }
-            } else if (ItemStack.isSameItemSameComponents(existing, carried)
-                    && carried.getCount() <= existing.getMaxStackSize() - existing.getCount()) {
-                return slot;
-            }
-        }
-        return emptySlot;
-    }
-
     private static void waitForMenuUpdate(ActiveCraft active, Phase phase, AbstractCraftingMenu menu) {
         active.phase = phase;
         active.expectedStateId = menu.getStateId();
@@ -651,7 +712,9 @@ public final class CraftingExecutor {
 
     private static void stop(String reason) {
         LazyCraft.LOGGER.warn("Stopped crafting executor: {}", reason);
-        LazyCraft.LOGGER.warn("Maybe try increase crafting execution delay?");
+        if (reason.contains("did not update")) {
+            LazyCraft.LOGGER.warn("Maybe try increasing the crafting execution delay or update timeout?");
+        }
         directCraft = null;
         activeCraft = null;
         queuedCrafts.clear();
@@ -678,21 +741,33 @@ public final class CraftingExecutor {
         WAITING_TO_START_NEXT_STEP
     }
 
-    private enum DirectCraftPhase {
-        WAITING_FOR_RESULT,
-        WAITING_FOR_INVENTORY
+    private enum ResultDestination {
+        CURSOR,
+        INVENTORY
     }
 
     private static final class DirectCraft {
         private final int containerId;
         private final ItemStack result;
-        private int expectedStateId;
+        private final ResultDestination destination;
+        private final long inventoryItemsBefore;
+        private final ItemStack carriedBefore;
+        private final int expectedStateId;
         private int ticksWaiting;
-        private DirectCraftPhase phase = DirectCraftPhase.WAITING_FOR_RESULT;
 
-        private DirectCraft(int containerId, ItemStack result, int expectedStateId) {
+        private DirectCraft(
+                int containerId,
+                ItemStack result,
+                ResultDestination destination,
+                long inventoryItemsBefore,
+                ItemStack carriedBefore,
+                int expectedStateId
+        ) {
             this.containerId = containerId;
             this.result = result;
+            this.destination = destination;
+            this.inventoryItemsBefore = inventoryItemsBefore;
+            this.carriedBefore = carriedBefore;
             this.expectedStateId = expectedStateId;
         }
     }
@@ -733,6 +808,10 @@ public final class CraftingExecutor {
         private ItemStack batchOutput = ItemStack.EMPTY;
         private long outputItemsBeforeBatch;
         private int outputItemsPerCraft;
+        private ResultDestination resultDestination;
+        private ItemStack singleCraftOutput = ItemStack.EMPTY;
+        private ItemStack carriedBeforeCraft = ItemStack.EMPTY;
+        private long outputItemsBeforeCraft;
         private int expectedStateId;
         private int ticksWaiting;
         private Phase phase = Phase.WAITING_FOR_PLACEMENT;
