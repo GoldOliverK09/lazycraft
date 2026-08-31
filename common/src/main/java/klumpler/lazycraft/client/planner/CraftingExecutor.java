@@ -36,8 +36,12 @@ public final class CraftingExecutor {
         return executePlan(plan, onComplete, true);
     }
 
-    public static boolean takePlacedResultsToInventory(ItemStack expectedResult) {
+    public static boolean takePlacedResultsToInventory(
+            ItemStack expectedResult,
+            Runnable onComplete
+    ) {
         Objects.requireNonNull(expectedResult, "expectedResult cannot be null");
+        Objects.requireNonNull(onComplete, "onComplete cannot be null");
         if (isExecuting()) {
             return false;
         }
@@ -72,7 +76,8 @@ public final class CraftingExecutor {
                 destination,
                 countInventoryStack(minecraft, result),
                 menu.getCarried().copy(),
-                menu.getStateId()
+                menu.getStateId(),
+                onComplete
         );
         minecraft.gameMode.handleContainerInput(
                 menu.containerId,
@@ -240,12 +245,14 @@ public final class CraftingExecutor {
     }
 
     private static void finishDirectCraft(String destination) {
+        Runnable callback = directCraft.onComplete;
         LazyCraft.LOGGER.debug(
                 "Finished direct crafting {} to {}",
                 itemName(directCraft.result.getItem()),
                 destination
         );
         directCraft = null;
+        callback.run();
     }
 
     private static void startNextCraft(Minecraft minecraft, AbstractCraftingMenu menu) {
@@ -715,10 +722,16 @@ public final class CraftingExecutor {
         if (reason.contains("did not update")) {
             LazyCraft.LOGGER.warn("Maybe try increasing the crafting execution delay or update timeout?");
         }
+        Runnable callback = directCraft != null
+                ? directCraft.onComplete
+                : completionCallback;
         directCraft = null;
         activeCraft = null;
         queuedCrafts.clear();
         completionCallback = null;
+        if (callback != null) {
+            callback.run();
+        }
     }
 
     private static void runCompletionCallback() {
@@ -753,6 +766,7 @@ public final class CraftingExecutor {
         private final long inventoryItemsBefore;
         private final ItemStack carriedBefore;
         private final int expectedStateId;
+        private final Runnable onComplete;
         private int ticksWaiting;
 
         private DirectCraft(
@@ -761,7 +775,8 @@ public final class CraftingExecutor {
                 ResultDestination destination,
                 long inventoryItemsBefore,
                 ItemStack carriedBefore,
-                int expectedStateId
+                int expectedStateId,
+                Runnable onComplete
         ) {
             this.containerId = containerId;
             this.result = result;
@@ -769,6 +784,7 @@ public final class CraftingExecutor {
             this.inventoryItemsBefore = inventoryItemsBefore;
             this.carriedBefore = carriedBefore;
             this.expectedStateId = expectedStateId;
+            this.onComplete = onComplete;
         }
     }
 

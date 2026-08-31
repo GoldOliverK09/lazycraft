@@ -5,6 +5,7 @@ import klumpler.lazycraft.client.recipebook.VisibleRecipeCraftability;
 import net.minecraft.client.gui.screens.recipebook.GhostSlots;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.crafting.display.RecipeDisplay;
 import net.minecraft.world.item.crafting.display.RecipeDisplayId;
@@ -21,7 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.function.Predicate;
 
 @Mixin(RecipeBookComponent.class)
-public class RecipeBookComponentMixin {
+public class RecipeBookComponentMixin implements RecipeBookComponentExtension {
     @Shadow
     @Final
     private GhostSlots ghostSlots;
@@ -41,7 +42,7 @@ public class RecipeBookComponentMixin {
     }
 
     @Shadow
-    private void updateCollections(boolean resetPage, boolean filtering) {
+    private void updateCollections(boolean resetPage, boolean isFiltering) {
         throw new AssertionError();
     }
 
@@ -81,6 +82,7 @@ public class RecipeBookComponentMixin {
                 recipe,
                 lastPlacedRecipe,
                 lazycraft$hasGhostRecipe(),
+                useMaxItems,
                 this::lazycraft$restoreGhostRecipe,
                 ghostSlots::clear
         )) {
@@ -88,18 +90,17 @@ public class RecipeBookComponentMixin {
         }
     }
 
-    @Inject(method = "slotClicked", at = @At("HEAD"), cancellable = true)
-    private void lazycraft$executeGhostOutput(Slot slot, CallbackInfo ci) {
-        if (RecipeBookCrafting.tryTakeGhostResult(
+    @Override
+    public boolean lazycraft$tryTakeGhostResult(Slot slot, ContainerInput input) {
+        return RecipeBookCrafting.tryTakeGhostResult(
                 slot,
                 lastPlacedRecipe,
                 lastRecipeCollection,
                 lazycraft$hasGhostRecipe(),
+                input == ContainerInput.QUICK_MOVE,
                 this::lazycraft$restoreGhostRecipe,
                 ghostSlots::clear
-        )) {
-            ci.cancel();
-        }
+        );
     }
 
     @Unique

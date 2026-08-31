@@ -42,6 +42,31 @@ public final class RecipePlanner {
                 .flatMap(session -> session.plan(target, finalRecipe, 1, () -> false));
     }
 
+    public static Optional<CraftPlan> planMaximum(
+            Item target,
+            RecipeDisplayId finalRecipe,
+            int outputItemsPerCraft,
+            int maximumOutputItems
+    ) {
+        Objects.requireNonNull(target, "target cannot be null");
+        Objects.requireNonNull(finalRecipe, "finalRecipe cannot be null");
+        Minecraft minecraft = Minecraft.getInstance();
+        Player player = minecraft.player;
+        if (player == null || minecraft.level == null) {
+            return Optional.empty();
+        }
+
+        CraftingGrid craftingGrid = CraftingGrid.current().orElse(CraftingGrid.CRAFTING_TABLE);
+        return captureSession(PlanningInventory.from(player), currentSettings(craftingGrid))
+                .flatMap(session -> session.planMaximum(
+                        target,
+                        finalRecipe,
+                        outputItemsPerCraft,
+                        maximumOutputItems,
+                        () -> false
+                ));
+    }
+
     public static Optional<PlanningSession> createShoppingSession(Player player) {
         Objects.requireNonNull(player, "player cannot be null");
         return captureSession(
@@ -189,6 +214,48 @@ public final class RecipePlanner {
                 BooleanSupplier cancellation
         ) {
             return !search(target, finalRecipe, quantity, cancellation, false).isEmpty();
+        }
+
+        public Optional<CraftPlan> planMaximum(
+                Item target,
+                RecipeDisplayId finalRecipe,
+                int outputItemsPerCraft,
+                int maximumOutputItems,
+                BooleanSupplier cancellation
+        ) {
+            Objects.requireNonNull(target, "target cannot be null");
+            Objects.requireNonNull(finalRecipe, "finalRecipe cannot be null");
+            Objects.requireNonNull(cancellation, "cancellation cannot be null");
+            if (outputItemsPerCraft <= 0) {
+                throw new IllegalArgumentException("outputItemsPerCraft must be positive");
+            }
+            if (maximumOutputItems <= 0) {
+                throw new IllegalArgumentException("maximumOutputItems must be positive");
+            }
+
+            int lowerCrafts = 1;
+            int upperCrafts = maximumOutputItems / outputItemsPerCraft;
+            int maximumCrafts = 0;
+            while (lowerCrafts <= upperCrafts) {
+                int crafts = lowerCrafts + (upperCrafts - lowerCrafts) / 2;
+                int quantity = Math.multiplyExact(crafts, outputItemsPerCraft);
+                if (canPlan(target, finalRecipe, quantity, cancellation)) {
+                    maximumCrafts = crafts;
+                    lowerCrafts = crafts + 1;
+                } else {
+                    upperCrafts = crafts - 1;
+                }
+            }
+
+            if (maximumCrafts == 0) {
+                return Optional.empty();
+            }
+            return plan(
+                    target,
+                    finalRecipe,
+                    Math.multiplyExact(maximumCrafts, outputItemsPerCraft),
+                    cancellation
+            );
         }
 
         public Optional<ShoppingList> shoppingList(

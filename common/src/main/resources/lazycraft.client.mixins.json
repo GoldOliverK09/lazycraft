@@ -3,6 +3,7 @@
   "package": "klumpler.lazycraft.client.mixin",
   "compatibilityLevel": "JAVA_25",
   "client": [
+    "AbstractRecipeBookScreenMixin",
     "ClientPacketListenerMixin",
     "GhostSlotsAccessor",
     "MultiPlayerGameModeMixin",
