@@ -63,6 +63,7 @@ public final class RecipePlanner {
                         finalRecipe,
                         outputItemsPerCraft,
                         maximumOutputItems,
+                        LazyCraftConfigManager.get().massCraftingPolicy,
                         () -> false
                 ));
     }
@@ -221,10 +222,12 @@ public final class RecipePlanner {
                 RecipeDisplayId finalRecipe,
                 int outputItemsPerCraft,
                 int maximumOutputItems,
+                LazyCraftConfig.MassCraftingPolicy massCraftingPolicy,
                 BooleanSupplier cancellation
         ) {
             Objects.requireNonNull(target, "target cannot be null");
             Objects.requireNonNull(finalRecipe, "finalRecipe cannot be null");
+            Objects.requireNonNull(massCraftingPolicy, "massCraftingPolicy cannot be null");
             Objects.requireNonNull(cancellation, "cancellation cannot be null");
             if (outputItemsPerCraft <= 0) {
                 throw new IllegalArgumentException("outputItemsPerCraft must be positive");
@@ -236,10 +239,19 @@ public final class RecipePlanner {
             int lowerCrafts = 1;
             int upperCrafts = maximumOutputItems / outputItemsPerCraft;
             int maximumCrafts = 0;
+            boolean lockRecipePaths = massCraftingPolicy
+                    == LazyCraftConfig.MassCraftingPolicy.CONSISTENT_PATHS;
             while (lowerCrafts <= upperCrafts) {
                 int crafts = lowerCrafts + (upperCrafts - lowerCrafts) / 2;
                 int quantity = Math.multiplyExact(crafts, outputItemsPerCraft);
-                if (canPlan(target, finalRecipe, quantity, cancellation)) {
+                if (!search(
+                        target,
+                        finalRecipe,
+                        quantity,
+                        cancellation,
+                        false,
+                        lockRecipePaths
+                ).isEmpty()) {
                     maximumCrafts = crafts;
                     lowerCrafts = crafts + 1;
                 } else {
@@ -250,12 +262,17 @@ public final class RecipePlanner {
             if (maximumCrafts == 0) {
                 return Optional.empty();
             }
-            return plan(
+            List<SearchResult> results = search(
                     target,
                     finalRecipe,
                     Math.multiplyExact(maximumCrafts, outputItemsPerCraft),
-                    cancellation
+                    cancellation,
+                    true,
+                    lockRecipePaths
             );
+            return results.isEmpty()
+                    ? Optional.empty()
+                    : Optional.of(new CraftPlan(results.getFirst().steps()));
         }
 
         public Optional<ShoppingList> shoppingList(
@@ -333,6 +350,17 @@ public final class RecipePlanner {
                 BooleanSupplier cancellation,
                 boolean collectSteps
         ) {
+            return search(target, finalRecipe, quantity, cancellation, collectSteps, false);
+        }
+
+        private List<SearchResult> search(
+                Item target,
+                RecipeDisplayId finalRecipe,
+                int quantity,
+                BooleanSupplier cancellation,
+                boolean collectSteps,
+                boolean lockRecipePaths
+        ) {
             Objects.requireNonNull(target, "target cannot be null");
             Objects.requireNonNull(finalRecipe, "finalRecipe cannot be null");
             Objects.requireNonNull(cancellation, "cancellation cannot be null");
@@ -345,7 +373,8 @@ public final class RecipePlanner {
                     recipeIndex,
                     cancellation,
                     collectSteps,
-                    false
+                    false,
+                    lockRecipePaths
             );
             search.ensureNotCancelled();
             return search.produceUsingRecipe(
@@ -366,7 +395,8 @@ public final class RecipePlanner {
             int maxCandidatesPerLayer,
             BooleanSupplier cancellation,
             Comparator<SearchResult> resultComparator,
-            boolean collectSteps
+            boolean collectSteps,
+            boolean lockRecipePaths
     ) {
         private static SearchContext create(
                 Settings settings,
@@ -374,6 +404,24 @@ public final class RecipePlanner {
                 BooleanSupplier cancellation,
                 boolean collectSteps,
                 boolean prioritizeMissingItems
+        ) {
+            return create(
+                    settings,
+                    recipeIndex,
+                    cancellation,
+                    collectSteps,
+                    prioritizeMissingItems,
+                    false
+            );
+        }
+
+        private static SearchContext create(
+                Settings settings,
+                RecipeIndex.Snapshot recipeIndex,
+                BooleanSupplier cancellation,
+                boolean collectSteps,
+                boolean prioritizeMissingItems,
+                boolean lockRecipePaths
         ) {
             Comparator<SearchResult> configuredComparator = comparator(settings.scoringMode());
             Comparator<SearchResult> effectiveComparator = prioritizeMissingItems
@@ -387,7 +435,8 @@ public final class RecipePlanner {
                     settings.maxCandidatesPerLayer(),
                     cancellation,
                     effectiveComparator,
-                    collectSteps
+                    collectSteps,
+                    lockRecipePaths
             );
         }
 
@@ -428,6 +477,17 @@ public final class RecipePlanner {
                 Set<Item> path,
                 int depth
         ) {
+            return produce(item, quantity, inventory, path, depth, Map.of());
+        }
+
+        private List<SearchResult> produce(
+                Item item,
+                int quantity,
+                PlanningInventory inventory,
+                Set<Item> path,
+                int depth,
+                Map<Item, RecipeDisplayId> recipeLocks
+        ) {
             ensureNotCancelled();
             if (depth >= maxSearchDepth || !path.add(item)) {
                 return List.of();
@@ -441,7 +501,8 @@ public final class RecipePlanner {
                         path,
                         depth,
                         RequirementMode.CRAFTABLE,
-                        RawRecipeFilter.ALL
+                        RawRecipeFilter.ALL,
+                        recipeLocks
                 );
             } finally {
                 path.remove(item);
@@ -470,7 +531,8 @@ public final class RecipePlanner {
                         depth,
                         RequirementMode.CRAFTABLE,
                         RawRecipeFilter.ALL,
-                        recipe
+                        recipe,
+                        Map.of()
                 );
             } finally {
                 path.remove(item);
@@ -521,7 +583,8 @@ public final class RecipePlanner {
                     depth,
                     requirementMode,
                     rawRecipeFilter,
-                    null
+                    null,
+                    Map.of()
             );
         }
 
@@ -533,12 +596,42 @@ public final class RecipePlanner {
                 int depth,
                 RequirementMode requirementMode,
                 RawRecipeFilter rawRecipeFilter,
-                RecipeDisplayId requiredRecipe
+                Map<Item, RecipeDisplayId> recipeLocks
+        ) {
+            return produceRecipeCandidates(
+                    item,
+                    quantity,
+                    inventory,
+                    path,
+                    depth,
+                    requirementMode,
+                    rawRecipeFilter,
+                    null,
+                    recipeLocks
+            );
+        }
+
+        private List<SearchResult> produceRecipeCandidates(
+                Item item,
+                int quantity,
+                PlanningInventory inventory,
+                Set<Item> path,
+                int depth,
+                RequirementMode requirementMode,
+                RawRecipeFilter rawRecipeFilter,
+                RecipeDisplayId requiredRecipe,
+                Map<Item, RecipeDisplayId> recipeLocks
         ) {
             StableTopK<SearchResult> candidates = bestCandidates();
             for (RecipeIndex.ResolvedRecipe recipe : recipeIndex.recipesProducing(item)) {
                 ensureNotCancelled();
                 if (requiredRecipe != null && !recipe.entry().id().equals(requiredRecipe)) {
+                    continue;
+                }
+                RecipeDisplayId lockedRecipe = recipeLocks.get(item);
+                if (lockRecipePaths
+                        && lockedRecipe != null
+                        && !recipe.entry().id().equals(lockedRecipe)) {
                     continue;
                 }
                 if (!recipe.supports(craftingGrid)) {
@@ -569,10 +662,14 @@ public final class RecipePlanner {
                 int crafts = Math.ceilDiv(quantity, outputCount);
                 long producedCount = Math.multiplyExact((long) outputCount, crafts);
                 long overproduction = producedCount - quantity;
+                SearchResult candidateStart = SearchResult.empty(inventory, recipeLocks);
+                if (lockRecipePaths) {
+                    candidateStart = candidateStart.withRecipeLock(item, recipe.entry().id());
+                }
                 List<SearchResult> satisfiedRequirements = satisfyRequirements(
                         requirements,
                         crafts,
-                        SearchResult.empty(inventory),
+                        candidateStart,
                         path,
                         depth,
                         requirementMode
@@ -885,7 +982,8 @@ public final class RecipePlanner {
                         missing,
                         start.inventory(),
                         path,
-                        depth
+                        depth,
+                        start.recipeLocks()
                 );
                 for (SearchResult produced : producedResults) {
                     ensureNotCancelled();
@@ -944,9 +1042,17 @@ public final class RecipePlanner {
             long overproduction,
             int maximumDependencyDepth,
             long missingItemCount,
-            Map<Item, Integer> missingItems
+            Map<Item, Integer> missingItems,
+            Map<Item, RecipeDisplayId> recipeLocks
     ) {
         private static SearchResult empty(PlanningInventory inventory) {
+            return empty(inventory, Map.of());
+        }
+
+        private static SearchResult empty(
+                PlanningInventory inventory,
+                Map<Item, RecipeDisplayId> recipeLocks
+        ) {
             return new SearchResult(
                     inventory,
                     List.of(),
@@ -956,7 +1062,8 @@ public final class RecipePlanner {
                     0,
                     0,
                     0,
-                    Map.of()
+                    Map.of(),
+                    recipeLocks
             );
         }
 
@@ -986,7 +1093,33 @@ public final class RecipePlanner {
                     overproduction,
                     maximumDependencyDepth,
                     missingItemCount,
-                    missingItems
+                    missingItems,
+                    recipeLocks
+            );
+        }
+
+        private SearchResult withRecipeLock(Item item, RecipeDisplayId recipe) {
+            RecipeDisplayId existing = recipeLocks.get(item);
+            if (recipe.equals(existing)) {
+                return this;
+            }
+            if (existing != null) {
+                throw new IllegalStateException("Conflicting recipe lock for " + item);
+            }
+
+            Map<Item, RecipeDisplayId> expandedRecipeLocks = new LinkedHashMap<>(recipeLocks);
+            expandedRecipeLocks.put(item, recipe);
+            return new SearchResult(
+                    inventory,
+                    steps,
+                    stepCount,
+                    totalIngredients,
+                    recipeExecutions,
+                    overproduction,
+                    maximumDependencyDepth,
+                    missingItemCount,
+                    missingItems,
+                    Collections.unmodifiableMap(expandedRecipeLocks)
             );
         }
 
@@ -1004,7 +1137,8 @@ public final class RecipePlanner {
                     overproduction,
                     maximumDependencyDepth,
                     Math.addExact(missingItemCount, count),
-                    Collections.unmodifiableMap(expandedMissingItems)
+                    Collections.unmodifiableMap(expandedMissingItems),
+                    recipeLocks
             );
         }
 
@@ -1022,7 +1156,8 @@ public final class RecipePlanner {
                     Math.addExact(overproduction, next.overproduction),
                     Math.max(maximumDependencyDepth, next.maximumDependencyDepth),
                     Math.addExact(missingItemCount, next.missingItemCount),
-                    mergeMissingItems(missingItems, next.missingItems)
+                    mergeMissingItems(missingItems, next.missingItems),
+                    next.recipeLocks
             );
         }
 
@@ -1052,7 +1187,8 @@ public final class RecipePlanner {
                     Math.addExact(overproduction, extraOutput),
                     Math.max(maximumDependencyDepth, dependencyDepth),
                     missingItemCount,
-                    missingItems
+                    missingItems,
+                    recipeLocks
             );
         }
 

@@ -24,6 +24,7 @@ public final class LazyCraftConfig {
     public int recursionDepth = DEFAULT_RECURSION_DEPTH;
     public int maxCandidatesPerLayer = DEFAULT_CANDIDATES_PER_LAYER;
     public ScoringMode scoringMode = ScoringMode.LEAST_TOTAL_INGREDIENTS;
+    public MassCraftingPolicy massCraftingPolicy = MassCraftingPolicy.MAXIMUM_OUTPUT;
     public int serverUpdateTimeoutTicks = DEFAULT_SERVER_UPDATE_TIMEOUT_TICKS;
     public int stepDelayTicks = DEFAULT_STEP_DELAY_TICKS;
 
@@ -48,6 +49,9 @@ public final class LazyCraftConfig {
         if (scoringMode == null) {
             scoringMode = ScoringMode.LEAST_TOTAL_INGREDIENTS;
         }
+        if (massCraftingPolicy == null) {
+            massCraftingPolicy = MassCraftingPolicy.MAXIMUM_OUTPUT;
+        }
     }
 
     public enum ScoringMode {
@@ -55,5 +59,10 @@ public final class LazyCraftConfig {
         FASTEST_EXECUTION,
         SHALLOWEST_CHAIN,
         LEAST_OVERPRODUCTION
+    }
+
+    public enum MassCraftingPolicy {
+        MAXIMUM_OUTPUT,
+        CONSISTENT_PATHS
     }
 }

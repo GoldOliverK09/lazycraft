@@ -1,4 +1,4 @@
-package klumpler.lazycraft.client.mixin;
+package klumpler.lazycraft.client.recipebook;
 
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;

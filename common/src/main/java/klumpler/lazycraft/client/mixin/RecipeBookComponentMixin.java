@@ -1,5 +1,6 @@
 package klumpler.lazycraft.client.mixin;
 
+import klumpler.lazycraft.client.recipebook.RecipeBookComponentExtension;
 import klumpler.lazycraft.client.recipebook.RecipeBookCrafting;
 import klumpler.lazycraft.client.recipebook.VisibleRecipeCraftability;
 import net.minecraft.client.gui.screens.recipebook.GhostSlots;

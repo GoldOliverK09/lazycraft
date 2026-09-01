@@ -12,6 +12,7 @@ import java.util.Optional;
 public final class LazyCraftConfigScreen {
     private static final String OPTION_KEY_PREFIX = "text.autoconfig.lazycraft.option.";
     private static final String SCORING_MODE_KEY_PREFIX = "text.lazycraft.scoring_mode.";
+    private static final String MASS_CRAFTING_POLICY_KEY_PREFIX = "text.lazycraft.mass_crafting_policy.";
 
     private LazyCraftConfigScreen() {
     }
@@ -67,6 +68,13 @@ public final class LazyCraftConfigScreen {
                 .setEnumNameProvider(LazyCraftConfigScreen::scoringModeLabel)
                 .setTooltipSupplier(LazyCraftConfigScreen::scoringModeTooltip)
                 .setSaveConsumer(value -> config.scoringMode = value).build());
+        recursiveCraftingCategory.addEntry(builder.entryBuilder()
+                .startEnumSelector(optionLabel("massCraftingPolicy"), LazyCraftConfig.MassCraftingPolicy.class,
+                        config.massCraftingPolicy)
+                .setDefaultValue(LazyCraftConfig.MassCraftingPolicy.MAXIMUM_OUTPUT)
+                .setEnumNameProvider(LazyCraftConfigScreen::massCraftingPolicyLabel)
+                .setTooltipSupplier(LazyCraftConfigScreen::massCraftingPolicyTooltip)
+                .setSaveConsumer(value -> config.massCraftingPolicy = value).build());
         executionCategory.addEntry(builder.entryBuilder()
                 .startIntSlider(optionLabel("serverUpdateTimeoutTicks"), config.serverUpdateTimeoutTicks,
                         LazyCraftConfig.MIN_SERVER_UPDATE_TIMEOUT_TICKS,
@@ -103,5 +111,17 @@ public final class LazyCraftConfigScreen {
 
     private static String scoringModeKey(Enum<?> mode) {
         return SCORING_MODE_KEY_PREFIX + mode.name().toLowerCase(Locale.ROOT);
+    }
+
+    private static Component massCraftingPolicyLabel(Enum<?> policy) {
+        return Component.translatable(massCraftingPolicyKey(policy));
+    }
+
+    private static Optional<Component[]> massCraftingPolicyTooltip(LazyCraftConfig.MassCraftingPolicy policy) {
+        return Optional.of(new Component[]{Component.translatable(massCraftingPolicyKey(policy) + ".tooltip")});
+    }
+
+    private static String massCraftingPolicyKey(Enum<?> policy) {
+        return MASS_CRAFTING_POLICY_KEY_PREFIX + policy.name().toLowerCase(Locale.ROOT);
     }
 }

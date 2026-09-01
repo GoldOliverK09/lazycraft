@@ -1,5 +1,6 @@
 package klumpler.lazycraft.client.mixin;
 
+import klumpler.lazycraft.client.recipebook.RecipeBookComponentExtension;
 import net.minecraft.client.gui.screens.inventory.AbstractRecipeBookScreen;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
 import net.minecraft.world.inventory.ContainerInput;
