@@ -11,7 +11,6 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
-import net.neoforged.neoforge.client.event.lifecycle.ClientStoppedEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
 @Mod(value = LazyCraft.MOD_ID, dist = Dist.CLIENT)
@@ -26,7 +25,9 @@ public final class LazyCraftNeoForge {
 
         NeoForge.EVENT_BUS.addListener(this::onRegisterClientCommands);
         NeoForge.EVENT_BUS.addListener(this::onClientTick);
-        NeoForge.EVENT_BUS.addListener(this::onClientStopped);
+        Runtime.getRuntime().addShutdownHook(
+                new Thread(this::onClientStopped, "LazyCraft shutdown")
+        );
     }
 
     private void onClientTick(ClientTickEvent.Post ignored) {
@@ -39,7 +40,7 @@ public final class LazyCraftNeoForge {
         ShoppingListCommandNeoForge.register(event.getDispatcher(), event.getBuildContext());
     }
 
-    private void onClientStopped(ClientStoppedEvent ignored) {
+    private void onClientStopped() {
         ShoppingListCommandNeoForge.shutdown();
         VisibleRecipeCraftability.shutdown();
     }

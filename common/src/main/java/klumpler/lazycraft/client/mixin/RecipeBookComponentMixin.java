@@ -3,6 +3,7 @@ package klumpler.lazycraft.client.mixin;
 import klumpler.lazycraft.client.recipebook.RecipeBookComponentExtension;
 import klumpler.lazycraft.client.recipebook.RecipeBookCrafting;
 import klumpler.lazycraft.client.recipebook.VisibleRecipeCraftability;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.recipebook.GhostSlots;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
@@ -17,6 +18,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
+import org.spongepowered.asm.mixin.injection.Surrogate;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -71,8 +73,33 @@ public class RecipeBookComponentMixin implements RecipeBookComponentExtension {
         );
     }
 
-    @Inject(method = "tryPlaceRecipe", at = @At("HEAD"), cancellable = true)
+    @Inject(
+            method = "tryPlaceRecipe",
+            at = @At("HEAD"),
+            cancellable = true
+    )
     private void lazycraft$executeGhostRecipePlan(
+            RecipeCollection recipeCollection,
+            RecipeDisplayId recipe,
+            CallbackInfoReturnable<Boolean> cir
+    ) {
+        lazycraft$handleGhostRecipePlan(
+                recipeCollection, recipe, Screen.hasShiftDown(), cir
+        );
+    }
+
+    @Surrogate
+    private void lazycraft$executeGhostRecipePlan(
+            RecipeCollection recipeCollection,
+            RecipeDisplayId recipe,
+            boolean useMaxItems,
+            CallbackInfoReturnable<Boolean> cir
+    ) {
+        lazycraft$handleGhostRecipePlan(recipeCollection, recipe, useMaxItems, cir);
+    }
+
+    @Unique
+    private void lazycraft$handleGhostRecipePlan(
             RecipeCollection recipeCollection,
             RecipeDisplayId recipe,
             boolean useMaxItems,

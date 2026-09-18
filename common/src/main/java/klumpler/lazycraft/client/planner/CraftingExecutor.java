@@ -5,6 +5,7 @@ import klumpler.lazycraft.client.config.LazyCraftConfig;
 import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractCraftingMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
@@ -587,7 +588,8 @@ public final class CraftingExecutor {
                 }
             }
             assert minecraft.player != null;
-            for (ItemStack stack : minecraft.player.getInventory().getNonEquipmentItems()) {
+            for (int inventorySlot = 0; inventorySlot < Inventory.INVENTORY_SIZE; inventorySlot++) {
+                ItemStack stack = minecraft.player.getInventory().getItem(inventorySlot);
                 if (ItemStack.isSameItemSameComponents(stack, ingredient)) {
                     available += stack.getCount();
                 }
@@ -684,7 +686,8 @@ public final class CraftingExecutor {
     private static long availableInventoryCapacity(Minecraft minecraft, ItemStack result) {
         long capacity = 0;
         assert minecraft.player != null;
-        for (ItemStack stack : minecraft.player.getInventory().getNonEquipmentItems()) {
+        for (int inventorySlot = 0; inventorySlot < Inventory.INVENTORY_SIZE; inventorySlot++) {
+            ItemStack stack = minecraft.player.getInventory().getItem(inventorySlot);
             if (stack.isEmpty()) {
                 capacity += result.getMaxStackSize();
             } else if (ItemStack.isSameItemSameComponents(stack, result)) {
@@ -697,7 +700,8 @@ public final class CraftingExecutor {
     private static long countInventoryStack(Minecraft minecraft, ItemStack expected) {
         long count = 0;
         assert minecraft.player != null;
-        for (ItemStack stack : minecraft.player.getInventory().getNonEquipmentItems()) {
+        for (int inventorySlot = 0; inventorySlot < Inventory.INVENTORY_SIZE; inventorySlot++) {
+            ItemStack stack = minecraft.player.getInventory().getItem(inventorySlot);
             if (ItemStack.isSameItemSameComponents(stack, expected)) {
                 count += stack.getCount();
             }
