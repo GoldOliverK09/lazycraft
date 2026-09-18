@@ -6,7 +6,7 @@ import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.AbstractCraftingMenu;
-import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -79,13 +79,13 @@ public final class CraftingExecutor {
                 menu.getStateId(),
                 onComplete
         );
-        minecraft.gameMode.handleContainerInput(
+        minecraft.gameMode.handleInventoryMouseClick(
                 menu.containerId,
                 menu.getResultSlot().index,
                 0,
                 destination == ResultDestination.INVENTORY
-                        ? ContainerInput.QUICK_MOVE
-                        : ContainerInput.PICKUP,
+                        ? ClickType.QUICK_MOVE
+                        : ClickType.PICKUP,
                 minecraft.player
         );
         return true;
@@ -390,13 +390,13 @@ public final class CraftingExecutor {
         waitForMenuUpdate(active, Phase.WAITING_FOR_CRAFT, menu);
         assert minecraft.gameMode != null;
         assert minecraft.player != null;
-        minecraft.gameMode.handleContainerInput(
+        minecraft.gameMode.handleInventoryMouseClick(
                 menu.containerId,
                 menu.getResultSlot().index,
                 0,
                 destination == ResultDestination.CURSOR
-                        ? ContainerInput.PICKUP
-                        : ContainerInput.QUICK_MOVE,
+                        ? ClickType.PICKUP
+                        : ClickType.QUICK_MOVE,
                 minecraft.player
         );
     }
@@ -474,11 +474,11 @@ public final class CraftingExecutor {
         waitForMenuUpdate(active, Phase.WAITING_FOR_BATCH_CRAFT, menu);
         assert minecraft.gameMode != null;
         assert minecraft.player != null;
-        minecraft.gameMode.handleContainerInput(
+        minecraft.gameMode.handleInventoryMouseClick(
                 menu.containerId,
                 menu.getResultSlot().index,
                 0,
-                ContainerInput.QUICK_MOVE,
+                ClickType.QUICK_MOVE,
                 minecraft.player
         );
     }
@@ -673,12 +673,6 @@ public final class CraftingExecutor {
                 }
             }
             return false;
-        }
-        if (display instanceof SlotDisplay.OnlyWithComponent filtered) {
-            return slotDisplayHasRemainder(filtered.source());
-        }
-        if (display instanceof SlotDisplay.WithAnyPotion(SlotDisplay display1)) {
-            return slotDisplayHasRemainder(display1);
         }
         return !(display instanceof SlotDisplay.Empty
                 || display instanceof SlotDisplay.ItemSlotDisplay

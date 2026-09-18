@@ -3,7 +3,7 @@ package klumpler.lazycraft.client.mixin;
 import klumpler.lazycraft.client.recipebook.RecipeBookComponentExtension;
 import net.minecraft.client.gui.screens.inventory.AbstractRecipeBookScreen;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
-import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -23,7 +23,7 @@ public abstract class AbstractRecipeBookScreenMixin {
             Slot slot,
             int slotId,
             int mouseButton,
-            ContainerInput input,
+            ClickType input,
             CallbackInfo ci
     ) {
         if (((RecipeBookComponentExtension) recipeBookComponent)

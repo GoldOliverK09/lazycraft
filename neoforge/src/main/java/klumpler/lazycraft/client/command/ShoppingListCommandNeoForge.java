@@ -38,13 +38,13 @@ public final class ShoppingListCommandNeoForge
                         .then(Commands.literal("ingredients")
                                 .executes(context -> INSTANCE.executeItem(
                                         context.getSource(),
-                                        ItemArgument.getItem(context, "item").item().value(),
+                                        ItemArgument.getItem(context, "item").getItem(),
                                         RecipePlanner.ShoppingMode.INGREDIENTS
                                 )))
                         .then(Commands.literal("raw")
                                 .executes(context -> INSTANCE.executeItem(
                                         context.getSource(),
-                                        ItemArgument.getItem(context, "item").item().value(),
+                                        ItemArgument.getItem(context, "item").getItem(),
                                         RecipePlanner.ShoppingMode.RAW
                                 ))))
         );

@@ -1,5 +1,5 @@
 plugins {
-    id 'net.fabricmc.fabric-loom' version "${loom_version}" apply false
+    id 'net.fabricmc.fabric-loom-remap' version "${loom_version}" apply false
     // The common module uses NeoForm to compile loader-neutral Minecraft code.
     id 'net.neoforged.moddev' version "${mdg_version}" apply false
 }

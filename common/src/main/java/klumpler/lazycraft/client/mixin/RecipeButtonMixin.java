@@ -30,7 +30,7 @@ public abstract class RecipeButtonMixin {
     }
 
     @Redirect(
-            method = "extractWidgetRenderState",
+            method = "renderWidget",
             at = @At(
                     value = "INVOKE",
                     target = "Lnet/minecraft/client/gui/screens/recipebook/RecipeCollection;hasCraftable()Z"

@@ -2,7 +2,7 @@ package klumpler.lazycraft.client.command;
 
 import com.mojang.brigadier.CommandDispatcher;
 import klumpler.lazycraft.client.planner.RecipePlanner;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -21,29 +21,29 @@ public final class ShoppingListCommandFabric
             CommandDispatcher<FabricClientCommandSource> dispatcher,
             CommandBuildContext buildContext
     ) {
-        dispatcher.register(ClientCommands.literal("lazycraft")
-                .then(ClientCommands.literal("hand")
-                        .then(ClientCommands.literal("ingredients")
+        dispatcher.register(ClientCommandManager.literal("lazycraft")
+                .then(ClientCommandManager.literal("hand")
+                        .then(ClientCommandManager.literal("ingredients")
                                 .executes(context -> INSTANCE.executeHeld(
                                         context.getSource(),
                                         RecipePlanner.ShoppingMode.INGREDIENTS
                                 )))
-                        .then(ClientCommands.literal("raw")
+                        .then(ClientCommandManager.literal("raw")
                                 .executes(context -> INSTANCE.executeHeld(
                                         context.getSource(),
                                         RecipePlanner.ShoppingMode.RAW
                                 ))))
-                .then(ClientCommands.argument("item", ItemArgument.item(buildContext))
-                        .then(ClientCommands.literal("ingredients")
+                .then(ClientCommandManager.argument("item", ItemArgument.item(buildContext))
+                        .then(ClientCommandManager.literal("ingredients")
                                 .executes(context -> INSTANCE.executeItem(
                                         context.getSource(),
-                                        ItemArgument.getItem(context, "item").item().value(),
+                                        ItemArgument.getItem(context, "item").getItem(),
                                         RecipePlanner.ShoppingMode.INGREDIENTS
                                 )))
-                        .then(ClientCommands.literal("raw")
+                        .then(ClientCommandManager.literal("raw")
                                 .executes(context -> INSTANCE.executeItem(
                                         context.getSource(),
-                                        ItemArgument.getItem(context, "item").item().value(),
+                                        ItemArgument.getItem(context, "item").getItem(),
                                         RecipePlanner.ShoppingMode.RAW
                                 ))))
         );

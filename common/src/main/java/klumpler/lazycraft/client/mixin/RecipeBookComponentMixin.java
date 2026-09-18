@@ -6,7 +6,7 @@ import klumpler.lazycraft.client.recipebook.VisibleRecipeCraftability;
 import net.minecraft.client.gui.screens.recipebook.GhostSlots;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
-import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.crafting.display.RecipeDisplay;
 import net.minecraft.world.item.crafting.display.RecipeDisplayId;
@@ -92,13 +92,13 @@ public class RecipeBookComponentMixin implements RecipeBookComponentExtension {
     }
 
     @Override
-    public boolean lazycraft$tryTakeGhostResult(Slot slot, ContainerInput input) {
+    public boolean lazycraft$tryTakeGhostResult(Slot slot, ClickType input) {
         return RecipeBookCrafting.tryTakeGhostResult(
                 slot,
                 lastPlacedRecipe,
                 lastRecipeCollection,
                 lazycraft$hasGhostRecipe(),
-                input == ContainerInput.QUICK_MOVE,
+                input == ClickType.QUICK_MOVE,
                 this::lazycraft$restoreGhostRecipe,
                 ghostSlots::clear
         );
