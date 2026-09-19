@@ -4,7 +4,10 @@ plugins {
 }
 
 neoForge {
-    neoFormVersion = neo_form_version
+    enable {
+        neoFormVersion = neo_form_version
+        disableRecompilation = true
+    }
 }
 
 dependencies {
