@@ -40,8 +40,7 @@ public final class RecipeBookCrafting {
                     && !hasGhostRecipe
                     && takePlacedResultsToInventory(
                     recipeCollection,
-                    recipe,
-                    restoreGhostRecipe
+                    recipe
             );
         }
         if (!config.recursiveRecipeBookCrafting
@@ -51,8 +50,7 @@ public final class RecipeBookCrafting {
                 recipeCollection,
                 recipe,
                 false,
-                craftMaximum,
-                restoreGhostRecipe
+                craftMaximum
         )) {
             return false;
         }
@@ -86,8 +84,7 @@ public final class RecipeBookCrafting {
                 lastRecipeCollection,
                 lastPlacedRecipe,
                 true,
-                craftMaximum,
-                restoreGhostRecipe
+                craftMaximum
         )) {
             return false;
         }
@@ -100,8 +97,7 @@ public final class RecipeBookCrafting {
             RecipeCollection recipeCollection,
             RecipeDisplayId recipe,
             boolean takeResultToCursor,
-            boolean craftMaximum,
-            Consumer<RecipeDisplay> restoreGhostRecipe
+            boolean craftMaximum
     ) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null) {
@@ -119,7 +115,7 @@ public final class RecipeBookCrafting {
             return false;
         }
 
-        Runnable restoreRecipe = () -> restoreGhostRecipe.accept(entry.display());
+        Runnable restoreRecipe = () -> placeRecipe(minecraft, entry.id());
         return (craftMaximum
                 ? RecipePlanner.planMaximum(
                 result.getItem(),
@@ -160,8 +156,7 @@ public final class RecipeBookCrafting {
 
     public static boolean takePlacedResultsToInventory(
             RecipeCollection recipeCollection,
-            RecipeDisplayId recipe,
-            Consumer<RecipeDisplay> restoreGhostRecipe
+            RecipeDisplayId recipe
     ) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null
@@ -185,8 +180,18 @@ public final class RecipeBookCrafting {
             return false;
         }
 
-        Runnable restoreRecipe = () -> restoreGhostRecipe.accept(entry.display());
+        Runnable restoreRecipe = () -> placeRecipe(minecraft, entry.id());
         return CraftingExecutor.takePlacedResultsToInventory(result, restoreRecipe);
+    }
+
+    private static void placeRecipe(Minecraft minecraft, RecipeDisplayId recipe) {
+        if (minecraft.player == null
+                || minecraft.gameMode == null
+                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
+            return;
+        }
+
+        minecraft.gameMode.handlePlaceRecipe(menu.containerId, recipe, false);
     }
 
     private static RecipeDisplayEntry findRecipeEntry(
