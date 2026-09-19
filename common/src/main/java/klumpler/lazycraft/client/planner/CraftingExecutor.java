@@ -22,6 +22,7 @@ public final class CraftingExecutor {
     private static final Deque<QueuedCraft> queuedCrafts = new ArrayDeque<>();
     private static ActiveCraft activeCraft;
     private static DirectCraft directCraft;
+    private static PendingDirectCraft pendingDirectCraft;
     private static Runnable completionCallback;
     private static int executionUpdateTimeoutTicks;
     private static int executionStepDelayTicks;
@@ -41,6 +42,23 @@ public final class CraftingExecutor {
             ItemStack expectedResult,
             Runnable onComplete
     ) {
+        return takePlacedResultsToInventory(expectedResult, onComplete, false, null);
+    }
+
+    public static boolean takePlacedResultsToInventory(
+            ItemStack expectedResult,
+            Runnable onComplete,
+            boolean craftMaximum
+    ) {
+        return takePlacedResultsToInventory(expectedResult, onComplete, craftMaximum, null);
+    }
+
+    public static boolean takePlacedResultsToInventory(
+            ItemStack expectedResult,
+            Runnable onComplete,
+            boolean craftMaximum,
+            RecipeDisplayId recipe
+    ) {
         Objects.requireNonNull(expectedResult, "expectedResult cannot be null");
         Objects.requireNonNull(onComplete, "onComplete cannot be null");
         if (isExecuting()) {
@@ -52,6 +70,22 @@ public final class CraftingExecutor {
                 || minecraft.gameMode == null
                 || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
             return false;
+        }
+
+        if (craftMaximum && recipe != null) {
+            pendingDirectCraft = new PendingDirectCraft(
+                    menu.containerId,
+                    expectedResult.copy(),
+                    menu.getStateId(),
+                    onComplete
+            );
+            executionUpdateTimeoutTicks = LazyCraftConfigManager.get().serverUpdateTimeoutTicks;
+            minecraft.gameMode.handlePlaceRecipe(
+                    menu.containerId,
+                    recipe,
+                    true
+            );
+            return true;
         }
 
         ItemStack result = menu.getResultSlot().getItem();
@@ -78,7 +112,8 @@ public final class CraftingExecutor {
                 countInventoryStack(minecraft, result),
                 menu.getCarried().copy(),
                 menu.getStateId(),
-                onComplete
+                onComplete,
+                craftMaximum
         );
         minecraft.gameMode.handleInventoryMouseClick(
                 menu.containerId,
@@ -155,7 +190,7 @@ public final class CraftingExecutor {
     }
 
     public static void tick(Minecraft minecraft) {
-        if (directCraft != null) {
+        if (directCraft != null || pendingDirectCraft != null) {
             tickDirectCraft(minecraft);
             return;
         }
@@ -206,10 +241,17 @@ public final class CraftingExecutor {
     }
 
     public static boolean isExecuting() {
-        return directCraft != null || activeCraft != null || !queuedCrafts.isEmpty();
+        return pendingDirectCraft != null
+                || directCraft != null
+                || activeCraft != null
+                || !queuedCrafts.isEmpty();
     }
 
     private static void tickDirectCraft(Minecraft minecraft) {
+        if (pendingDirectCraft != null) {
+            tickPendingDirectCraft(minecraft);
+            return;
+        }
         if (minecraft.player == null
                 || minecraft.gameMode == null
                 || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
@@ -232,6 +274,21 @@ public final class CraftingExecutor {
             if (storedItems < directCraft.inventoryItemsBefore + directCraft.result.getCount()) {
                 return;
             }
+            if (directCraft.craftMaximum
+                    && menu.getResultSlot().getItem().is(directCraft.result.getItem())
+                    && availableInventoryCapacity(minecraft, directCraft.result) >= directCraft.result.getCount()) {
+                directCraft.inventoryItemsBefore = storedItems;
+                directCraft.expectedStateId = menu.getStateId();
+                directCraft.ticksWaiting = 0;
+                minecraft.gameMode.handleInventoryMouseClick(
+                        menu.containerId,
+                        menu.getResultSlot().index,
+                        0,
+                        ClickType.QUICK_MOVE,
+                        minecraft.player
+                );
+                return;
+            }
             finishDirectCraft("inventory");
             return;
         }
@@ -243,6 +300,31 @@ public final class CraftingExecutor {
             return;
         }
         finishDirectCraft("cursor");
+    }
+
+    private static void tickPendingDirectCraft(Minecraft minecraft) {
+        if (minecraft.player == null
+                || minecraft.gameMode == null
+                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
+                || menu.containerId != pendingDirectCraft.containerId) {
+            stop("the crafting grid was closed");
+            return;
+        }
+
+        pendingDirectCraft.ticksWaiting++;
+        if (pendingDirectCraft.ticksWaiting > executionUpdateTimeoutTicks) {
+            stop("the server did not update the crafting table in time");
+            return;
+        }
+        if (menu.getStateId() == pendingDirectCraft.expectedStateId) {
+            return;
+        }
+
+        PendingDirectCraft pending = pendingDirectCraft;
+        pendingDirectCraft = null;
+        if (!takePlacedResultsToInventory(pending.expectedResult, pending.onComplete, true, null)) {
+            stop("the server could not place the recipe for direct crafting");
+        }
     }
 
     private static void finishDirectCraft(String destination) {
@@ -722,8 +804,11 @@ public final class CraftingExecutor {
         }
         Runnable callback = directCraft != null
                 ? directCraft.onComplete
+                : pendingDirectCraft != null
+                ? pendingDirectCraft.onComplete
                 : completionCallback;
         directCraft = null;
+        pendingDirectCraft = null;
         activeCraft = null;
         queuedCrafts.clear();
         completionCallback = null;
@@ -761,10 +846,11 @@ public final class CraftingExecutor {
         private final int containerId;
         private final ItemStack result;
         private final ResultDestination destination;
-        private final long inventoryItemsBefore;
+        private final boolean craftMaximum;
         private final ItemStack carriedBefore;
-        private final int expectedStateId;
+        private long inventoryItemsBefore;
         private final Runnable onComplete;
+        private int expectedStateId;
         private int ticksWaiting;
 
         private DirectCraft(
@@ -774,13 +860,35 @@ public final class CraftingExecutor {
                 long inventoryItemsBefore,
                 ItemStack carriedBefore,
                 int expectedStateId,
-                Runnable onComplete
+                Runnable onComplete,
+                boolean craftMaximum
         ) {
             this.containerId = containerId;
             this.result = result;
             this.destination = destination;
             this.inventoryItemsBefore = inventoryItemsBefore;
             this.carriedBefore = carriedBefore;
+            this.expectedStateId = expectedStateId;
+            this.onComplete = onComplete;
+            this.craftMaximum = craftMaximum;
+        }
+    }
+
+    private static final class PendingDirectCraft {
+        private final int containerId;
+        private final ItemStack expectedResult;
+        private final int expectedStateId;
+        private final Runnable onComplete;
+        private int ticksWaiting;
+
+        private PendingDirectCraft(
+                int containerId,
+                ItemStack expectedResult,
+                int expectedStateId,
+                Runnable onComplete
+        ) {
+            this.containerId = containerId;
+            this.expectedResult = expectedResult;
             this.expectedStateId = expectedStateId;
             this.onComplete = onComplete;
         }

@@ -40,7 +40,8 @@ public final class RecipeBookCrafting {
                     && !hasGhostRecipe
                     && takePlacedResultsToInventory(
                     recipeCollection,
-                    recipe
+                    recipe,
+                    craftMaximum
             );
         }
         if (!config.recursiveRecipeBookCrafting
@@ -115,7 +116,7 @@ public final class RecipeBookCrafting {
             return false;
         }
 
-        Runnable restoreRecipe = () -> placeRecipe(minecraft, entry.id());
+        Runnable restoreRecipe = () -> placeRecipe(minecraft, entry.id(), craftMaximum);
         return (craftMaximum
                 ? RecipePlanner.planMaximum(
                 result.getItem(),
@@ -156,7 +157,8 @@ public final class RecipeBookCrafting {
 
     public static boolean takePlacedResultsToInventory(
             RecipeCollection recipeCollection,
-            RecipeDisplayId recipe
+            RecipeDisplayId recipe,
+            boolean craftMaximum
     ) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null
@@ -180,18 +182,27 @@ public final class RecipeBookCrafting {
             return false;
         }
 
-        Runnable restoreRecipe = () -> placeRecipe(minecraft, entry.id());
-        return CraftingExecutor.takePlacedResultsToInventory(result, restoreRecipe);
+        Runnable restoreRecipe = () -> placeRecipe(minecraft, entry.id(), craftMaximum);
+        return CraftingExecutor.takePlacedResultsToInventory(
+                result,
+                restoreRecipe,
+                craftMaximum,
+                entry.id()
+        );
     }
 
-    private static void placeRecipe(Minecraft minecraft, RecipeDisplayId recipe) {
+    private static void placeRecipe(
+            Minecraft minecraft,
+            RecipeDisplayId recipe,
+            boolean craftMaximum
+    ) {
         if (minecraft.player == null
                 || minecraft.gameMode == null
                 || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
             return;
         }
 
-        minecraft.gameMode.handlePlaceRecipe(menu.containerId, recipe, false);
+        minecraft.gameMode.handlePlaceRecipe(menu.containerId, recipe, craftMaximum);
     }
 
     private static RecipeDisplayEntry findRecipeEntry(
