@@ -17,7 +17,10 @@ def commonMainSourceSet = commonSourceSets.named(SourceSet.MAIN_SOURCE_SET_NAME)
 def neoForgeMainSourceSet = sourceSets.named(SourceSet.MAIN_SOURCE_SET_NAME)
 
 neoForge {
-    version = neoforge_version
+    enable {
+        version = neoforge_version
+        disableRecompilation = true
+    }
 
     runs {
         configureEach { RunModel run ->
