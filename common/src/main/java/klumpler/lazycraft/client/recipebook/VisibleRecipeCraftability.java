@@ -663,7 +663,7 @@ public final class VisibleRecipeCraftability {
 
         private State recalculate(long generation, Environment currentEnvironment, RecipePlanner.PlanningSession session) {
             // Reuse the same outputByRecipe & visibleOutputs, new craftableByOutput map
-            Deque<Item> newPending = createPendingOutputs(visibleOutputs, Map.of());
+            Deque<Item> newPending = new ArrayDeque<>(createPendingOutputs(visibleOutputs, Map.of()));
             return new State(
                     generation,
                     currentEnvironment,

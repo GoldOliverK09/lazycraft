@@ -48,15 +48,15 @@ public final class ShoppingListCommandFabric
                                         ItemArgument.getItem(context, "item").getItem(),
                                         RecipePlanner.ShoppingMode.RAW
                                 ))))
-                .then(ClientCommands.literal("config")
-                        .then(ClientCommands.argument("setting", StringArgumentType.word())
+                .then(ClientCommandManager.literal("config")
+                        .then(ClientCommandManager.argument("setting", StringArgumentType.word())
                                 .suggests((context, builder) ->
                                         LazyCraftConfigCommand.suggestSettings(builder))
                                 .executes(context -> reportConfigResult(
                                         context.getSource(),
                                         LazyCraftConfigCommand.query(
                                                 StringArgumentType.getString(context, "setting"))))
-                                .then(ClientCommands.argument("value", StringArgumentType.word())
+                                .then(ClientCommandManager.argument("value", StringArgumentType.word())
                                         .suggests((context, builder) ->
                                                 LazyCraftConfigCommand.suggestValues(
                                                         StringArgumentType.getString(context, "setting"),
