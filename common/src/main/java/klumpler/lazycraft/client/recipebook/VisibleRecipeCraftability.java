@@ -50,6 +50,7 @@ public final class VisibleRecipeCraftability {
     private static boolean environmentDirty = false;
     private static boolean visibleRecipesDirty = false;
     private static boolean recipeIndexDirty = false;
+    private static boolean configurationRefreshRequired;
     private static long lastRecipeIndexGeneration = -1L;
     private static int lastPlayerContainerId = -1;
     private static long lastPlayerInventoryVersion = -1L;
@@ -170,10 +171,18 @@ public final class VisibleRecipeCraftability {
 
     public static long refreshFilter(long previousRevision, BooleanSupplier filtering, Runnable updateCollections) {
         long currentRevision = filterRevision;
-        if (currentRevision != previousRevision && filtering.getAsBoolean()) {
+        if (currentRevision != previousRevision
+                && (filtering.getAsBoolean() || configurationRefreshRequired)) {
             updateCollections.run();
+            configurationRefreshRequired = false;
         }
         return currentRevision;
+    }
+
+    public static void configurationChanged() {
+        environmentDirty = true;
+        configurationRefreshRequired = true;
+        filterRevision++;
     }
 
     public static boolean isCraftable(RecipeCollection collection, RecipeDisplayId recipe) {

@@ -67,7 +67,7 @@ public class RecipeBookComponentMixin implements RecipeBookComponentExtension {
         lazycraft$filterRevision = VisibleRecipeCraftability.refreshFilter(
                 lazycraft$filterRevision,
                 this::isFiltering,
-                () -> updateCollections(false, true)
+                () -> updateCollections(false, isFiltering())
         );
     }
 
