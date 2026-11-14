@@ -1,6 +1,8 @@
 package klumpler.lazycraft.client.command;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import klumpler.lazycraft.client.config.LazyCraftConfigCommand;
 import klumpler.lazycraft.client.planner.RecipePlanner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -47,7 +49,37 @@ public final class ShoppingListCommandNeoForge
                                         ItemArgument.getItem(context, "item").getItem(),
                                         RecipePlanner.ShoppingMode.RAW
                                 ))))
+                .then(Commands.literal("config")
+                        .then(Commands.argument("setting", StringArgumentType.word())
+                                .suggests((context, builder) ->
+                                        LazyCraftConfigCommand.suggestSettings(builder))
+                                .executes(context -> reportConfigResult(
+                                        context.getSource(),
+                                        LazyCraftConfigCommand.query(
+                                                StringArgumentType.getString(context, "setting"))))
+                                .then(Commands.argument("value", StringArgumentType.word())
+                                        .suggests((context, builder) ->
+                                                LazyCraftConfigCommand.suggestValues(
+                                                        StringArgumentType.getString(context, "setting"),
+                                                        builder))
+                                        .executes(context -> reportConfigResult(
+                                                context.getSource(),
+                                                LazyCraftConfigCommand.set(
+                                                        StringArgumentType.getString(context, "setting"),
+                                                        StringArgumentType.getString(context, "value")))))))
         );
+    }
+
+    private static int reportConfigResult(
+            CommandSourceStack source,
+            LazyCraftConfigCommand.Result result
+    ) {
+        if (result.success()) {
+            source.sendSuccess(result::message, false);
+            return 1;
+        }
+        source.sendFailure(result.message());
+        return 0;
     }
 
     public static void shutdown() {
