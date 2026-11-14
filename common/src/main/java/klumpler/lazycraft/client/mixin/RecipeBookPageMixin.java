@@ -23,4 +23,9 @@ public class RecipeBookPageMixin {
     private void lazycraft$clearVisibleRecipes(CallbackInfo ci) {
         VisibleRecipeCraftability.clear();
     }
+
+    @Inject(method = "updateCollections", at = @At("TAIL"))
+    private void onCategoryChange(CallbackInfo ci) {
+        VisibleRecipeCraftability.recipeBookCategoryChanged();
+    }
 }

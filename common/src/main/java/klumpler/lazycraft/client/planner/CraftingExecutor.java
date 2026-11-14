@@ -224,9 +224,14 @@ public final class CraftingExecutor {
             return;
         }
 
-        if (menu.getStateId() == activeCraft.expectedStateId) {
+        int stateId = menu.getStateId();
+        if (stateId == activeCraft.expectedStateId) {
             return;
         }
+        if (stateId == activeCraft.lastProcessedStateId) {
+            return;
+        }
+        activeCraft.lastProcessedStateId = stateId;
 
         switch (activeCraft.phase) {
             case WAITING_FOR_PLACEMENT -> handleInitialPlacement(minecraft, activeCraft, menu);
@@ -265,9 +270,14 @@ public final class CraftingExecutor {
             stop("the server did not update the direct craft in time");
             return;
         }
-        if (menu.getStateId() == directCraft.expectedStateId) {
+        int stateId = menu.getStateId();
+        if (stateId == directCraft.expectedStateId) {
             return;
         }
+        if (stateId == directCraft.lastProcessedStateId) {
+            return;
+        }
+        directCraft.lastProcessedStateId = stateId;
 
         if (directCraft.destination == ResultDestination.INVENTORY) {
             long storedItems = countInventoryStack(minecraft, directCraft.result);
@@ -279,6 +289,7 @@ public final class CraftingExecutor {
                     && availableInventoryCapacity(minecraft, directCraft.result) >= directCraft.result.getCount()) {
                 directCraft.inventoryItemsBefore = storedItems;
                 directCraft.expectedStateId = menu.getStateId();
+                directCraft.lastProcessedStateId = directCraft.expectedStateId;
                 directCraft.ticksWaiting = 0;
                 minecraft.gameMode.handleInventoryMouseClick(
                         menu.containerId,
@@ -316,9 +327,14 @@ public final class CraftingExecutor {
             stop("the server did not update the crafting table in time");
             return;
         }
-        if (menu.getStateId() == pendingDirectCraft.expectedStateId) {
+        int stateId = menu.getStateId();
+        if (stateId == pendingDirectCraft.expectedStateId) {
             return;
         }
+        if (stateId == pendingDirectCraft.lastProcessedStateId) {
+            return;
+        }
+        pendingDirectCraft.lastProcessedStateId = stateId;
 
         PendingDirectCraft pending = pendingDirectCraft;
         pendingDirectCraft = null;
@@ -794,6 +810,7 @@ public final class CraftingExecutor {
     private static void waitForMenuUpdate(ActiveCraft active, Phase phase, AbstractCraftingMenu menu) {
         active.phase = phase;
         active.expectedStateId = menu.getStateId();
+        active.lastProcessedStateId = active.expectedStateId;
         active.ticksWaiting = 0;
     }
 
@@ -851,6 +868,7 @@ public final class CraftingExecutor {
         private long inventoryItemsBefore;
         private final Runnable onComplete;
         private int expectedStateId;
+        private int lastProcessedStateId;
         private int ticksWaiting;
 
         private DirectCraft(
@@ -869,6 +887,7 @@ public final class CraftingExecutor {
             this.inventoryItemsBefore = inventoryItemsBefore;
             this.carriedBefore = carriedBefore;
             this.expectedStateId = expectedStateId;
+            this.lastProcessedStateId = expectedStateId;
             this.onComplete = onComplete;
             this.craftMaximum = craftMaximum;
         }
@@ -878,6 +897,7 @@ public final class CraftingExecutor {
         private final int containerId;
         private final ItemStack expectedResult;
         private final int expectedStateId;
+        private int lastProcessedStateId;
         private final Runnable onComplete;
         private int ticksWaiting;
 
@@ -890,6 +910,7 @@ public final class CraftingExecutor {
             this.containerId = containerId;
             this.expectedResult = expectedResult;
             this.expectedStateId = expectedStateId;
+            this.lastProcessedStateId = expectedStateId;
             this.onComplete = onComplete;
         }
     }
@@ -935,6 +956,7 @@ public final class CraftingExecutor {
         private ItemStack carriedBeforeCraft = ItemStack.EMPTY;
         private long outputItemsBeforeCraft;
         private int expectedStateId;
+        private int lastProcessedStateId;
         private int ticksWaiting;
         private Phase phase = Phase.WAITING_FOR_PLACEMENT;
 
