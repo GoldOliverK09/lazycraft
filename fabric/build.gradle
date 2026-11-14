@@ -48,7 +48,7 @@ dependencies {
     compileOnly project(':common')
     clientRuntimeOnly commonMainSourceSet.get().output
     modCompileOnly "maven.modrinth:9s6osm5g:${cloth_config_fabric_version}" // Cloth Config API
-    modCompileOnly 'maven.modrinth:mOgUt4GM:4xPSbh0l' // Mod Menu 12.0.0 for 1.21.2/3
+    modCompileOnly 'maven.modrinth:mOgUt4GM:YIfqIJ8q' // Mod Menu 11.0.3 for 1.21.1
 }
 
 def modVersion = project.version
