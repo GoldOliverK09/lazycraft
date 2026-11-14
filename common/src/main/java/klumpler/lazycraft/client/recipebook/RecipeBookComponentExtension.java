@@ -4,5 +4,5 @@ import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 
 public interface RecipeBookComponentExtension {
-    boolean lazycraft$tryTakeGhostResult(Slot slot, ClickType input);
+    boolean lazycraft$tryTakeGhostResult(Slot slot, int slotId, ClickType input);
 }

@@ -46,6 +46,7 @@ public final class RecipeBookCrafting {
 
     public static boolean tryTakeGhostResult(
             Slot slot,
+            int slotId,
             RecipeHolder<?> lastRecipe,
             RecipeCollection lastRecipeCollection,
             boolean hasGhostRecipe,
@@ -57,18 +58,18 @@ public final class RecipeBookCrafting {
         RecipeBookMenu<?, ?> menu = craftingMenu(minecraft.player);
         if (!config.recipeBookCrafting
                 || !config.recursiveRecipeBookCrafting
-                || CraftingExecutor.isExecuting()
                 || !hasGhostRecipe
                 || lastRecipe == null
-                || lastRecipeCollection == null
                 || minecraft.player == null
                 || menu == null
-                || slot != resultSlot(menu)
+                || slot == null
+                || slotId != menu.getResultSlotIndex()
                 || !slot.getItem().isEmpty()) {
             return false;
         }
 
-        if (executePlan(lastRecipeCollection, lastRecipe, true, craftMaximum)) {
+        if (!CraftingExecutor.isExecuting()
+                && executePlan(lastRecipeCollection, lastRecipe, true, craftMaximum)) {
             clearGhostRecipe.run();
         }
         return true;
@@ -85,7 +86,11 @@ public final class RecipeBookCrafting {
             return false;
         }
 
-        ItemStack result = recipe.value().getResultItem(recipeCollection.registryAccess());
+        ItemStack result = recipe.value().getResultItem(
+                recipeCollection != null
+                        ? recipeCollection.registryAccess()
+                        : minecraft.level.registryAccess()
+        );
         if (result.isEmpty()) {
             return false;
         }

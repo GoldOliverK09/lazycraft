@@ -26,7 +26,7 @@ public abstract class AbstractRecipeBookScreenMixin {
                 ? craftingScreen.getRecipeBookComponent()
                 : ((InventoryScreen) screen).getRecipeBookComponent();
         if (((RecipeBookComponentExtension) recipeBookComponent)
-                .lazycraft$tryTakeGhostResult(slot, input)) {
+                .lazycraft$tryTakeGhostResult(slot, slotId, input)) {
             ci.cancel();
         }
     }

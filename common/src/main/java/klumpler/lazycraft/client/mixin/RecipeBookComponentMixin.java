@@ -103,9 +103,10 @@ public abstract class RecipeBookComponentMixin implements RecipeBookComponentExt
     }
 
     @Override
-    public boolean lazycraft$tryTakeGhostResult(Slot slot, ClickType input) {
+    public boolean lazycraft$tryTakeGhostResult(Slot slot, int slotId, ClickType input) {
         return RecipeBookCrafting.tryTakeGhostResult(
                 slot,
+                slotId,
                 ghostRecipe.getRecipe(),
                 recipeBookPage.getLastClickedRecipeCollection(),
                 lazycraft$hasGhostRecipe(),
@@ -121,6 +122,6 @@ public abstract class RecipeBookComponentMixin implements RecipeBookComponentExt
 
     @Unique
     private boolean lazycraft$hasGhostRecipe() {
-        return ghostRecipe.size() > 0;
+        return ghostRecipe.getRecipe() != null;
     }
 }
