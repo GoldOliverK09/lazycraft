@@ -1,6 +1,7 @@
 package klumpler.lazycraft.client.planner;
 
 import klumpler.lazycraft.LazyCraft;
+import klumpler.lazycraft.client.recipebook.VisibleRecipeCraftability;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import net.minecraft.util.context.ContextMap;
@@ -61,6 +62,7 @@ public final class RecipeIndex {
                 Collections.unmodifiableMap(rebuiltPrimaryOutputs),
                 List.copyOf(rebuiltOutputOrder)
         );
+        VisibleRecipeCraftability.recipeIndexChanged();
         LazyCraft.LOGGER.info(
                 "Recipe lookup took {} ms for {} recipes ({} unique outputs)",
                 (System.nanoTime() - startNanos) / 1_000_000.0,
