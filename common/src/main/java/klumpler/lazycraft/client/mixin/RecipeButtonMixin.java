@@ -1,11 +1,11 @@
 package klumpler.lazycraft.client.mixin;
 
 import klumpler.lazycraft.client.recipebook.VisibleRecipeCraftability;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookPage;
 import net.minecraft.client.gui.screens.recipebook.RecipeButton;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
-import net.minecraft.util.context.ContextMap;
-import net.minecraft.world.item.crafting.display.RecipeDisplayId;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -13,20 +13,46 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.List;
+
 @Mixin(RecipeButton.class)
 public abstract class RecipeButtonMixin {
     @Shadow
-    public abstract RecipeDisplayId getCurrentRecipe();
+    private List<RecipeHolder<?>> getOrderedRecipes() {
+        throw new AssertionError();
+    }
 
     @Inject(method = "init", at = @At("TAIL"))
     private void lazycraft$trackVisibleRecipes(
             RecipeCollection collection,
-            boolean isFiltering,
             RecipeBookPage page,
-            ContextMap resolutionContext,
             CallbackInfo ci
     ) {
-        VisibleRecipeCraftability.track(collection, resolutionContext);
+        VisibleRecipeCraftability.track(collection);
+    }
+
+    @Inject(method = "getOrderedRecipes", at = @At("RETURN"))
+    private void lazycraft$removeDuplicateRecipes(
+            org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<List<RecipeHolder<?>>> cir
+    ) {
+        List<RecipeHolder<?>> recipes = cir.getReturnValue();
+        for (int i = 0; i < recipes.size(); i++) {
+            for (int j = i + 1; j < recipes.size(); ) {
+                if (recipes.get(i).id().equals(recipes.get(j).id())) {
+                    recipes.remove(j);
+                } else {
+                    j++;
+                }
+            }
+        }
+    }
+
+    @Inject(method = "renderWidget", at = @At("HEAD"), cancellable = true)
+    private void lazycraft$skipEmptyRecipeButtons(CallbackInfo ci) {
+        if (getOrderedRecipes().isEmpty()) {
+            ((AbstractWidget) (Object) this).visible = false;
+            ci.cancel();
+        }
     }
 
     @Redirect(
@@ -37,6 +63,7 @@ public abstract class RecipeButtonMixin {
             )
     )
     private boolean lazycraft$showRecursiveCraftability(RecipeCollection collection) {
-        return VisibleRecipeCraftability.isCraftable(collection, getCurrentRecipe());
+        return collection.hasCraftable()
+                || VisibleRecipeCraftability.hasRecursivelyCraftable(collection);
     }
 }

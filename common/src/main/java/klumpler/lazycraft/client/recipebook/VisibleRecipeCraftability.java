@@ -8,13 +8,11 @@ import klumpler.lazycraft.client.planner.RecipeIndex;
 import klumpler.lazycraft.client.planner.RecipePlanner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
-import net.minecraft.util.context.ContextMap;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
-import net.minecraft.world.item.crafting.display.RecipeDisplayId;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.level.Level;
 
 import java.util.*;
@@ -35,7 +33,7 @@ public final class VisibleRecipeCraftability {
     private static final State EMPTY_STATE = State.empty();
 
     // --- Reusable collections to avoid allocations ---
-    private static final Map<RecipeDisplayId, Item> REUSABLE_OUTPUT_BY_RECIPE = new HashMap<>(64);
+    private static final Map<RecipeHolder<?>, Item> REUSABLE_OUTPUT_BY_RECIPE = new HashMap<>(64);
     private static State activeState = EMPTY_STATE;
     private static Refresh refresh;
     private static Job inFlightJob;
@@ -103,8 +101,8 @@ public final class VisibleRecipeCraftability {
         );
     }
 
-    public static void track(RecipeCollection collection, ContextMap context) {
-        if (refresh == null || collection.hasCraftable()) {
+    public static void track(RecipeCollection collection) {
+        if (refresh == null) {
             return;
         }
 
@@ -115,18 +113,16 @@ public final class VisibleRecipeCraftability {
             visibleRecipesDirty = true;
         }
 
-        for (RecipeDisplayEntry entry : collection.getSelectedRecipes(RecipeCollection.CraftableStatus.ANY)) {
-            Item indexedOutput = RecipeIndex.primaryOutputOrNull(entry.id());
+        for (RecipeHolder<?> entry : collection.getDisplayRecipes(false)) {
+            Item indexedOutput = RecipeIndex.primaryOutputOrNull(entry);
             if (indexedOutput != null) {
-                refresh.track(entry.id(), indexedOutput);
+                refresh.track(entry, indexedOutput);
                 continue;
             }
 
-            for (ItemStack result : entry.resultItems(context)) {
-                if (!result.isEmpty()) {
-                    refresh.track(entry.id(), result.getItem());
-                    break;
-                }
+            ItemStack result = entry.value().getResultItem(collection.registryAccess());
+            if (!result.isEmpty()) {
+                refresh.track(entry, result.getItem());
             }
         }
     }
@@ -161,7 +157,7 @@ public final class VisibleRecipeCraftability {
         PLANNING_EXECUTOR.shutdownNow();
     }
 
-    public static boolean isRecursivelyCraftable(RecipeDisplayId recipe) {
+    public static boolean isRecursivelyCraftable(RecipeHolder<?> recipe) {
         return activeState.isRecursivelyCraftable(recipe);
     }
 
@@ -185,27 +181,26 @@ public final class VisibleRecipeCraftability {
         filterRevision++;
     }
 
-    public static boolean isCraftable(RecipeCollection collection, RecipeDisplayId recipe) {
-        return collection.hasCraftable() || isRecursivelyCraftable(recipe);
+    public static boolean isCraftable(RecipeCollection collection, RecipeHolder<?> recipe) {
+        return collection.isCraftable(recipe) || isRecursivelyCraftable(recipe);
     }
 
-    public static List<RecipeDisplayEntry> includeRecursivelyCraftableEntries(
+    public static List<RecipeHolder<?>> includeRecursivelyCraftableEntries(
             RecipeCollection collection,
-            RecipeCollection.CraftableStatus status,
-            List<RecipeDisplayEntry> entries,
-            Set<RecipeDisplayId> selected,
-            List<RecipeDisplayEntry> vanillaEntries
+            boolean craftableOnly,
+            List<RecipeHolder<?>> vanillaEntries
     ) {
-        if (status != RecipeCollection.CraftableStatus.CRAFTABLE) {
+        if (!craftableOnly) {
             return vanillaEntries;
         }
 
-        List<RecipeDisplayEntry> expanded = null;
-        for (RecipeDisplayEntry entry : entries) {
-            RecipeDisplayId recipe = entry.id();
-            if (!selected.contains(recipe)
-                    || collection.isCraftable(recipe)
-                    || !isRecursivelyCraftable(recipe)) {
+        List<RecipeHolder<?>> expanded = null;
+        Set<net.minecraft.resources.ResourceLocation> alreadyPresent = new HashSet<>();
+        for (RecipeHolder<?> entry : vanillaEntries) {
+            alreadyPresent.add(entry.id());
+        }
+        for (RecipeHolder<?> entry : collection.getDisplayRecipes(false)) {
+            if (!isRecursivelyCraftable(entry) || !alreadyPresent.add(entry.id())) {
                 continue;
             }
 
@@ -218,8 +213,8 @@ public final class VisibleRecipeCraftability {
     }
 
     public static boolean hasRecursivelyCraftable(RecipeCollection collection) {
-        for (RecipeDisplayEntry entry : collection.getSelectedRecipes(RecipeCollection.CraftableStatus.ANY)) {
-            if (isRecursivelyCraftable(entry.id())) {
+        for (RecipeHolder<?> entry : collection.getDisplayRecipes(false)) {
+            if (isRecursivelyCraftable(entry)) {
                 return true;
             }
         }
@@ -554,7 +549,7 @@ public final class VisibleRecipeCraftability {
         private final RecipePlanner.PlanningSession reusableSession;
         private final Map<Item, Boolean> craftableByOutput;
         // Use reusable collections
-        private final Map<RecipeDisplayId, Item> outputByRecipe = REUSABLE_OUTPUT_BY_RECIPE;
+        private final Map<RecipeHolder<?>, Item> outputByRecipe = REUSABLE_OUTPUT_BY_RECIPE;
         private final Set<Item> visibleOutputs = REUSABLE_VISIBLE_OUTPUTS;
 
         private Refresh(long generation, Environment environment, RecipePlanner.PlanningSession reusableSession, Map<Item, Boolean> craftableByOutput) {
@@ -564,7 +559,7 @@ public final class VisibleRecipeCraftability {
             this.craftableByOutput = craftableByOutput;
         }
 
-        private void track(RecipeDisplayId recipe, Item output) {
+        private void track(RecipeHolder<?> recipe, Item output) {
             outputByRecipe.put(recipe, output);
             visibleOutputs.add(output);
         }
@@ -576,7 +571,7 @@ public final class VisibleRecipeCraftability {
             }
 
             // Create immutable snapshots for State
-            Map<RecipeDisplayId, Item> outputSnapshot = Map.copyOf(outputByRecipe);
+            Map<RecipeHolder<?>, Item> outputSnapshot = Map.copyOf(outputByRecipe);
             Set<Item> visibleSnapshot = Collections.unmodifiableSet(new LinkedHashSet<>(visibleOutputs));
             Deque<Item> pendingSnapshot = new ArrayDeque<>(createPendingOutputs(visibleSnapshot, craftableByOutput));
 
@@ -604,7 +599,7 @@ public final class VisibleRecipeCraftability {
             long generation,
             Environment environment,
             RecipePlanner.PlanningSession session,
-            Map<RecipeDisplayId, Item> outputByRecipe,
+            Map<RecipeHolder<?>, Item> outputByRecipe,
             Set<Item> visibleOutputs,
             Map<Item, Boolean> craftableByOutput,
             Deque<Item> pendingOutputs
@@ -625,7 +620,7 @@ public final class VisibleRecipeCraftability {
                     && environment.settings.craftingGrid().equals(other.settings.craftingGrid());
         }
 
-        private boolean isRecursivelyCraftable(RecipeDisplayId recipe) {
+        private boolean isRecursivelyCraftable(RecipeHolder<?> recipe) {
             Item output = outputByRecipe.get(recipe);
             if (output == null) {
                 output = RecipeIndex.primaryOutputOrNull(recipe);

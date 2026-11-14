@@ -3,14 +3,16 @@ package klumpler.lazycraft.client.mixin;
 import klumpler.lazycraft.client.recipebook.RecipeBookComponentExtension;
 import klumpler.lazycraft.client.recipebook.RecipeBookCrafting;
 import klumpler.lazycraft.client.recipebook.VisibleRecipeCraftability;
+import net.minecraft.client.ClientRecipeBook;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.screens.recipebook.GhostSlots;
+import net.minecraft.client.gui.screens.recipebook.GhostRecipe;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
+import net.minecraft.client.gui.screens.recipebook.RecipeBookPage;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
 import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.RecipeBookMenu;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.crafting.display.RecipeDisplay;
-import net.minecraft.world.item.crafting.display.RecipeDisplayId;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -18,34 +20,30 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
-import org.spongepowered.asm.mixin.injection.Surrogate;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.function.Predicate;
 
 @Mixin(RecipeBookComponent.class)
-public class RecipeBookComponentMixin implements RecipeBookComponentExtension {
+public abstract class RecipeBookComponentMixin implements RecipeBookComponentExtension {
     @Shadow
     @Final
-    private GhostSlots ghostSlots;
-
+    protected GhostRecipe ghostRecipe;
     @Shadow
-    private RecipeDisplayId lastPlacedRecipe;
-
+    protected RecipeBookMenu<?, ?> menu;
     @Shadow
-    private RecipeCollection lastRecipeCollection;
+    @Final
+    private RecipeBookPage recipeBookPage;
+    @Shadow
+    @Final
+    private ClientRecipeBook book;
 
     @Unique
     private long lazycraft$filterRevision;
 
     @Shadow
-    private boolean isFiltering() {
-        throw new AssertionError();
-    }
-
-    @Shadow
-    private void updateCollections(boolean resetPage, boolean isFiltering) {
+    private void updateCollections(boolean resetPage) {
         throw new AssertionError();
     }
 
@@ -54,7 +52,7 @@ public class RecipeBookComponentMixin implements RecipeBookComponentExtension {
             at = @At(
                     value = "INVOKE",
                     target = "Ljava/util/List;removeIf(Ljava/util/function/Predicate;)Z",
-                    ordinal = 2
+                    ordinal = 3
             ),
             index = 0
     )
@@ -68,51 +66,37 @@ public class RecipeBookComponentMixin implements RecipeBookComponentExtension {
     private void lazycraft$refreshRecursiveFilter(CallbackInfo ci) {
         lazycraft$filterRevision = VisibleRecipeCraftability.refreshFilter(
                 lazycraft$filterRevision,
-                this::isFiltering,
-                () -> updateCollections(false, isFiltering())
+                this::lazycraft$isFiltering,
+                () -> updateCollections(false)
         );
     }
 
     @Inject(
-            method = "tryPlaceRecipe",
-            at = @At("HEAD"),
+            method = "mouseClicked",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/gui/screens/recipebook/RecipeBookPage;mouseClicked(DDIIIII)Z",
+                    shift = At.Shift.AFTER
+            ),
             cancellable = true
     )
     private void lazycraft$executeGhostRecipePlan(
-            RecipeCollection recipeCollection,
-            RecipeDisplayId recipe,
+            double mouseX,
+            double mouseY,
+            int button,
             CallbackInfoReturnable<Boolean> cir
     ) {
-        lazycraft$handleGhostRecipePlan(
-                recipeCollection, recipe, Screen.hasShiftDown(), cir
-        );
-    }
-
-    @Surrogate
-    private void lazycraft$executeGhostRecipePlan(
-            RecipeCollection recipeCollection,
-            RecipeDisplayId recipe,
-            boolean useMaxItems,
-            CallbackInfoReturnable<Boolean> cir
-    ) {
-        lazycraft$handleGhostRecipePlan(recipeCollection, recipe, useMaxItems, cir);
-    }
-
-    @Unique
-    private void lazycraft$handleGhostRecipePlan(
-            RecipeCollection recipeCollection,
-            RecipeDisplayId recipe,
-            boolean useMaxItems,
-            CallbackInfoReturnable<Boolean> cir
-    ) {
-        if (RecipeBookCrafting.tryPlaceRecipe(
-                recipeCollection,
+        RecipeHolder<?> recipe = recipeBookPage.getLastClickedRecipe();
+        RecipeCollection collection = recipeBookPage.getLastClickedRecipeCollection();
+        if (recipe != null
+                && collection != null
+                && RecipeBookCrafting.tryPlaceRecipe(
+                collection,
                 recipe,
-                lastPlacedRecipe,
+                ghostRecipe.getRecipe(),
                 lazycraft$hasGhostRecipe(),
-                useMaxItems,
-                this::lazycraft$restoreGhostRecipe,
-                ghostSlots::clear
+                Screen.hasShiftDown(),
+                ghostRecipe::clear
         )) {
             cir.setReturnValue(true);
         }
@@ -122,24 +106,21 @@ public class RecipeBookComponentMixin implements RecipeBookComponentExtension {
     public boolean lazycraft$tryTakeGhostResult(Slot slot, ClickType input) {
         return RecipeBookCrafting.tryTakeGhostResult(
                 slot,
-                lastPlacedRecipe,
-                lastRecipeCollection,
+                ghostRecipe.getRecipe(),
+                recipeBookPage.getLastClickedRecipeCollection(),
                 lazycraft$hasGhostRecipe(),
                 input == ClickType.QUICK_MOVE,
-                this::lazycraft$restoreGhostRecipe,
-                ghostSlots::clear
+                ghostRecipe::clear
         );
     }
 
     @Unique
-    private void lazycraft$restoreGhostRecipe(RecipeDisplay recipe) {
-        ((RecipeBookComponent<?>) (Object) this).fillGhostRecipe(recipe);
+    private boolean lazycraft$isFiltering() {
+        return book.isFiltering(menu);
     }
 
     @Unique
     private boolean lazycraft$hasGhostRecipe() {
-        return !((GhostSlotsAccessor) ghostSlots)
-                .lazycraft$getIngredients()
-                .isEmpty();
+        return ghostRecipe.size() > 0;
     }
 }

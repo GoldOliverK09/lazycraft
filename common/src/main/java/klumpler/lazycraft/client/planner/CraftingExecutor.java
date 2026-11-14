@@ -6,15 +6,11 @@ import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.inventory.AbstractCraftingMenu;
-import net.minecraft.world.inventory.ClickType;
-import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.inventory.*;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.CraftingInput;
-import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
-import net.minecraft.world.item.crafting.display.*;
+import net.minecraft.world.item.crafting.RecipeHolder;
 
 import java.util.*;
 
@@ -57,7 +53,7 @@ public final class CraftingExecutor {
             ItemStack expectedResult,
             Runnable onComplete,
             boolean craftMaximum,
-            RecipeDisplayId recipe
+            RecipeHolder<?> recipe
     ) {
         Objects.requireNonNull(expectedResult, "expectedResult cannot be null");
         Objects.requireNonNull(onComplete, "onComplete cannot be null");
@@ -68,7 +64,8 @@ public final class CraftingExecutor {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null
                 || minecraft.gameMode == null
-                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
+                || !(minecraft.player.containerMenu instanceof RecipeBookMenu<?, ?> menu)
+                || !isCraftingMenu(menu)) {
             return false;
         }
 
@@ -88,7 +85,7 @@ public final class CraftingExecutor {
             return true;
         }
 
-        ItemStack result = menu.getResultSlot().getItem();
+        ItemStack result = resultSlot(menu).getItem();
         if (result.isEmpty()
                 || !ItemStack.isSameItemSameComponents(result, expectedResult)
                 || result.getCount() != expectedResult.getCount()) {
@@ -117,7 +114,7 @@ public final class CraftingExecutor {
         );
         minecraft.gameMode.handleInventoryMouseClick(
                 menu.containerId,
-                menu.getResultSlot().index,
+                resultSlot(menu).index,
                 0,
                 destination == ResultDestination.INVENTORY
                         ? ClickType.QUICK_MOVE
@@ -156,7 +153,8 @@ public final class CraftingExecutor {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null
                 || minecraft.gameMode == null
-                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
+                || !(minecraft.player.containerMenu instanceof RecipeBookMenu<?, ?> menu)
+                || !isCraftingMenu(menu)) {
             return false;
         }
 
@@ -201,7 +199,8 @@ public final class CraftingExecutor {
 
         if (minecraft.player == null
                 || minecraft.gameMode == null
-                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
+                || !(minecraft.player.containerMenu instanceof RecipeBookMenu<?, ?> menu)
+                || !isCraftingMenu(menu)
                 || menu.containerId != activeCraft.containerId) {
             stop("the crafting grid was closed");
             return;
@@ -259,7 +258,8 @@ public final class CraftingExecutor {
         }
         if (minecraft.player == null
                 || minecraft.gameMode == null
-                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
+                || !(minecraft.player.containerMenu instanceof RecipeBookMenu<?, ?> menu)
+                || !isCraftingMenu(menu)
                 || menu.containerId != directCraft.containerId) {
             stop("the crafting grid was closed");
             return;
@@ -285,7 +285,7 @@ public final class CraftingExecutor {
                 return;
             }
             if (directCraft.craftMaximum
-                    && menu.getResultSlot().getItem().is(directCraft.result.getItem())
+                    && resultSlot(menu).getItem().is(directCraft.result.getItem())
                     && availableInventoryCapacity(minecraft, directCraft.result) >= directCraft.result.getCount()) {
                 directCraft.inventoryItemsBefore = storedItems;
                 directCraft.expectedStateId = menu.getStateId();
@@ -293,7 +293,7 @@ public final class CraftingExecutor {
                 directCraft.ticksWaiting = 0;
                 minecraft.gameMode.handleInventoryMouseClick(
                         menu.containerId,
-                        menu.getResultSlot().index,
+                        resultSlot(menu).index,
                         0,
                         ClickType.QUICK_MOVE,
                         minecraft.player
@@ -316,7 +316,8 @@ public final class CraftingExecutor {
     private static void tickPendingDirectCraft(Minecraft minecraft) {
         if (minecraft.player == null
                 || minecraft.gameMode == null
-                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
+                || !(minecraft.player.containerMenu instanceof RecipeBookMenu<?, ?> menu)
+                || !isCraftingMenu(menu)
                 || menu.containerId != pendingDirectCraft.containerId) {
             stop("the crafting grid was closed");
             return;
@@ -354,7 +355,7 @@ public final class CraftingExecutor {
         callback.run();
     }
 
-    private static void startNextCraft(Minecraft minecraft, AbstractCraftingMenu menu) {
+    private static void startNextCraft(Minecraft minecraft, RecipeBookMenu<?, ?> menu) {
         QueuedCraft nextCraft = queuedCrafts.removeFirst();
         CraftingStep step = nextCraft.step();
         activeCraft = new ActiveCraft(
@@ -366,7 +367,7 @@ public final class CraftingExecutor {
         placeRecipe(minecraft, activeCraft, menu);
     }
 
-    private static void placeRecipe(Minecraft minecraft, ActiveCraft active, AbstractCraftingMenu menu) {
+    private static void placeRecipe(Minecraft minecraft, ActiveCraft active, RecipeBookMenu<?, ?> menu) {
         active.expectedStagedCrafts = 1;
         active.batchTargetCrafts = 1;
         active.pendingBatchCrafts = 0;
@@ -376,7 +377,7 @@ public final class CraftingExecutor {
     private static void handleInitialPlacement(
             Minecraft minecraft,
             ActiveCraft active,
-            AbstractCraftingMenu menu
+            RecipeBookMenu<?, ?> menu
     ) {
         if (!hasExpectedResult(active, menu)) {
             return;
@@ -417,7 +418,7 @@ public final class CraftingExecutor {
     private static void handleBatchPlacement(
             Minecraft minecraft,
             ActiveCraft active,
-            AbstractCraftingMenu menu
+            RecipeBookMenu<?, ?> menu
     ) {
         if (!hasExpectedResult(active, menu)) {
             return;
@@ -452,25 +453,25 @@ public final class CraftingExecutor {
     private static void sendPlacement(
             Minecraft minecraft,
             ActiveCraft active,
-            AbstractCraftingMenu menu,
+            RecipeBookMenu<?, ?> menu,
             Phase phase
     ) {
         waitForMenuUpdate(active, phase, menu);
         assert minecraft.gameMode != null;
         minecraft.gameMode.handlePlaceRecipe(
                 menu.containerId,
-                active.step.recipe().id(),
+                active.step.recipe(),
                 false
         );
     }
 
-    private static void takeResult(Minecraft minecraft, ActiveCraft active, AbstractCraftingMenu menu) {
+    private static void takeResult(Minecraft minecraft, ActiveCraft active, RecipeBookMenu<?, ?> menu) {
         if (!hasExpectedResult(active, menu)) {
             stop("the server could not place " + itemName(active.step.output()));
             return;
         }
 
-        ItemStack result = menu.getResultSlot().getItem().copy();
+        ItemStack result = resultSlot(menu).getItem().copy();
         ResultDestination destination = chooseResultDestination(
                 minecraft,
                 menu,
@@ -491,7 +492,7 @@ public final class CraftingExecutor {
         assert minecraft.player != null;
         minecraft.gameMode.handleInventoryMouseClick(
                 menu.containerId,
-                menu.getResultSlot().index,
+                resultSlot(menu).index,
                 0,
                 destination == ResultDestination.CURSOR
                         ? ClickType.PICKUP
@@ -502,7 +503,7 @@ public final class CraftingExecutor {
 
     private static ResultDestination chooseResultDestination(
             Minecraft minecraft,
-            AbstractCraftingMenu menu,
+            RecipeBookMenu<?, ?> menu,
             ItemStack result,
             boolean preferCursor
     ) {
@@ -539,7 +540,7 @@ public final class CraftingExecutor {
     private static boolean hasStoredCraftResult(
             Minecraft minecraft,
             ActiveCraft active,
-            AbstractCraftingMenu menu
+            RecipeBookMenu<?, ?> menu
     ) {
         if (active.resultDestination == ResultDestination.INVENTORY) {
             return countInventoryStack(minecraft, active.singleCraftOutput)
@@ -558,9 +559,9 @@ public final class CraftingExecutor {
     private static void takeBatchResult(
             Minecraft minecraft,
             ActiveCraft active,
-            AbstractCraftingMenu menu
+            RecipeBookMenu<?, ?> menu
     ) {
-        ItemStack result = menu.getResultSlot().getItem();
+        ItemStack result = resultSlot(menu).getItem();
         if (result.isEmpty() || !result.is(active.step.output())) {
             stop("the server could not finish staging " + itemName(active.step.output()));
             return;
@@ -575,7 +576,7 @@ public final class CraftingExecutor {
         assert minecraft.player != null;
         minecraft.gameMode.handleInventoryMouseClick(
                 menu.containerId,
-                menu.getResultSlot().index,
+                resultSlot(menu).index,
                 0,
                 ClickType.QUICK_MOVE,
                 minecraft.player
@@ -585,7 +586,7 @@ public final class CraftingExecutor {
     private static void finishBatchCraft(
             Minecraft minecraft,
             ActiveCraft active,
-            AbstractCraftingMenu menu
+            RecipeBookMenu<?, ?> menu
     ) {
         long outputIncrease = countInventoryStack(minecraft, active.batchOutput)
                 - active.outputItemsBeforeBatch;
@@ -607,7 +608,7 @@ public final class CraftingExecutor {
     private static void finishCrafts(
             Minecraft minecraft,
             ActiveCraft active,
-            AbstractCraftingMenu menu,
+            RecipeBookMenu<?, ?> menu,
             int completedCrafts
     ) {
         active.remainingCrafts -= completedCrafts;
@@ -632,14 +633,14 @@ public final class CraftingExecutor {
 
     private static boolean hasExpectedResult(
             ActiveCraft active,
-            AbstractCraftingMenu menu
+            RecipeBookMenu<?, ?> menu
     ) {
-        return menu.getResultSlot().getItem().is(active.step.output());
+        return resultSlot(menu).getItem().is(active.step.output());
     }
 
-    private static int uniformStagedCrafts(AbstractCraftingMenu menu) {
+    private static int uniformStagedCrafts(RecipeBookMenu<?, ?> menu) {
         int stagedCrafts = 0;
-        for (Slot slot : menu.getInputGridSlots()) {
+        for (Slot slot : inputGridSlots(menu)) {
             ItemStack stack = slot.getItem();
             if (stack.isEmpty()) {
                 continue;
@@ -656,9 +657,9 @@ public final class CraftingExecutor {
     private static int calculateBatchTarget(
             Minecraft minecraft,
             ActiveCraft active,
-            AbstractCraftingMenu menu
+            RecipeBookMenu<?, ?> menu
     ) {
-        ItemStack result = menu.getResultSlot().getItem();
+        ItemStack result = resultSlot(menu).getItem();
         long outputCapacity = availableInventoryCapacity(minecraft, result);
         long craftsThatFit = outputCapacity / result.getCount();
         return (int) Math.min(
@@ -667,8 +668,8 @@ public final class CraftingExecutor {
         );
     }
 
-    private static int exactIngredientLimit(Minecraft minecraft, AbstractCraftingMenu menu) {
-        List<Slot> inputSlots = menu.getInputGridSlots();
+    private static int exactIngredientLimit(Minecraft minecraft, RecipeBookMenu<?, ?> menu) {
+        List<Slot> inputSlots = inputGridSlots(menu);
         int limit = inputStackLimit(menu);
         for (int index = 0; index < inputSlots.size(); index++) {
             ItemStack ingredient = inputSlots.get(index).getItem();
@@ -706,9 +707,9 @@ public final class CraftingExecutor {
         return false;
     }
 
-    private static int inputStackLimit(AbstractCraftingMenu menu) {
+    private static int inputStackLimit(RecipeBookMenu<?, ?> menu) {
         int limit = Integer.MAX_VALUE;
-        for (Slot slot : menu.getInputGridSlots()) {
+        for (Slot slot : inputGridSlots(menu)) {
             ItemStack stack = slot.getItem();
             if (!stack.isEmpty()) {
                 limit = Math.min(limit, stack.getMaxStackSize());
@@ -717,68 +718,25 @@ public final class CraftingExecutor {
         return limit == Integer.MAX_VALUE ? 1 : limit;
     }
 
-    private static boolean hasCraftingRemainder(AbstractCraftingMenu menu) {
-        CraftingInput input = CraftingInput.of(
-                menu.getGridWidth(),
-                menu.getGridHeight(),
-                menu.getInputGridSlots().stream().map(Slot::getItem).toList()
-        );
-        return CraftingRecipe.defaultCraftingReminder(input).stream()
-                .anyMatch(stack -> !stack.isEmpty());
+    private static boolean hasCraftingRemainder(RecipeBookMenu<?, ?> menu) {
+        return inputGridSlots(menu).stream()
+                .map(Slot::getItem)
+                .anyMatch(stack -> stack.getItem().hasCraftingRemainingItem());
     }
 
-    private static boolean recipeMayReturnIngredients(RecipeDisplayEntry recipe) {
-        if (recipeDisplayHasRemainder(recipe.display())) {
+    private static boolean recipeMayReturnIngredients(RecipeHolder<?> holder) {
+        if (!(holder.value() instanceof net.minecraft.world.item.crafting.ShapedRecipe)
+                && !(holder.value() instanceof net.minecraft.world.item.crafting.ShapelessRecipe)) {
             return true;
         }
-
-        Optional<List<Ingredient>> requirements = recipe.craftingRequirements();
-        if (requirements.isEmpty()) {
-            return true;
-        }
-        for (Ingredient ingredient : requirements.get()) {
-            if (slotDisplayHasRemainder(ingredient.display())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean recipeDisplayHasRemainder(RecipeDisplay display) {
-        List<SlotDisplay> ingredients;
-        if (display instanceof ShapedCraftingRecipeDisplay shaped) {
-            ingredients = shaped.ingredients();
-        } else if (display instanceof ShapelessCraftingRecipeDisplay shapeless) {
-            ingredients = shapeless.ingredients();
-        } else {
-            return true;
-        }
-
-        for (SlotDisplay ingredient : ingredients) {
-            if (slotDisplayHasRemainder(ingredient)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean slotDisplayHasRemainder(SlotDisplay display) {
-        if (display instanceof SlotDisplay.WithRemainder) {
-            return true;
-        }
-        if (display instanceof SlotDisplay.Composite(List<SlotDisplay> contents)) {
-            for (SlotDisplay choice : contents) {
-                if (slotDisplayHasRemainder(choice)) {
+        for (Ingredient ingredient : holder.value().getIngredients()) {
+            for (ItemStack stack : ingredient.getItems()) {
+                if (stack.getItem().hasCraftingRemainingItem()) {
                     return true;
                 }
             }
-            return false;
         }
-        return !(display instanceof SlotDisplay.Empty
-                || display instanceof SlotDisplay.ItemSlotDisplay
-                || display instanceof SlotDisplay.ItemStackSlotDisplay
-                || display instanceof SlotDisplay.TagSlotDisplay
-                || display instanceof SlotDisplay.AnyFuel);
+        return false;
     }
 
     private static long availableInventoryCapacity(Minecraft minecraft, ItemStack result) {
@@ -795,6 +753,19 @@ public final class CraftingExecutor {
         return capacity;
     }
 
+    private static boolean isCraftingMenu(RecipeBookMenu<?, ?> menu) {
+        return menu instanceof CraftingMenu || menu instanceof InventoryMenu;
+    }
+
+    private static Slot resultSlot(RecipeBookMenu<?, ?> menu) {
+        return menu.slots.get(menu.getResultSlotIndex());
+    }
+
+    private static List<Slot> inputGridSlots(RecipeBookMenu<?, ?> menu) {
+        int firstInputSlot = menu.getResultSlotIndex() + 1;
+        return menu.slots.subList(firstInputSlot, firstInputSlot + menu.getSize());
+    }
+
     private static long countInventoryStack(Minecraft minecraft, ItemStack expected) {
         long count = 0;
         assert minecraft.player != null;
@@ -807,7 +778,7 @@ public final class CraftingExecutor {
         return count;
     }
 
-    private static void waitForMenuUpdate(ActiveCraft active, Phase phase, AbstractCraftingMenu menu) {
+    private static void waitForMenuUpdate(ActiveCraft active, Phase phase, RecipeBookMenu<?, ?> menu) {
         active.phase = phase;
         active.expectedStateId = menu.getStateId();
         active.lastProcessedStateId = active.expectedStateId;

@@ -5,7 +5,7 @@ import klumpler.lazycraft.client.config.LazyCraftConfigManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.crafting.display.RecipeDisplayId;
+import net.minecraft.world.item.crafting.RecipeHolder;
 
 import java.util.*;
 import java.util.concurrent.CancellationException;
@@ -28,7 +28,7 @@ public final class RecipePlanner {
                 .flatMap(session -> session.plan(target, 1, () -> false));
     }
 
-    public static Optional<CraftPlan> plan(Item target, RecipeDisplayId finalRecipe) {
+    public static Optional<CraftPlan> plan(Item target, RecipeHolder<?> finalRecipe) {
         Objects.requireNonNull(target, "target cannot be null");
         Objects.requireNonNull(finalRecipe, "finalRecipe cannot be null");
         Minecraft minecraft = Minecraft.getInstance();
@@ -44,7 +44,7 @@ public final class RecipePlanner {
 
     public static Optional<CraftPlan> planMaximum(
             Item target,
-            RecipeDisplayId finalRecipe,
+            RecipeHolder<?> finalRecipe,
             int outputItemsPerCraft,
             int maximumOutputItems
     ) {
@@ -183,7 +183,7 @@ public final class RecipePlanner {
 
         public Optional<CraftPlan> plan(
                 Item target,
-                RecipeDisplayId finalRecipe,
+                RecipeHolder<?> finalRecipe,
                 int quantity,
                 BooleanSupplier cancellation
         ) {
@@ -210,7 +210,7 @@ public final class RecipePlanner {
 
         public boolean canPlan(
                 Item target,
-                RecipeDisplayId finalRecipe,
+                RecipeHolder<?> finalRecipe,
                 int quantity,
                 BooleanSupplier cancellation
         ) {
@@ -219,7 +219,7 @@ public final class RecipePlanner {
 
         public Optional<CraftPlan> planMaximum(
                 Item target,
-                RecipeDisplayId finalRecipe,
+                RecipeHolder<?> finalRecipe,
                 int outputItemsPerCraft,
                 int maximumOutputItems,
                 LazyCraftConfig.MassCraftingPolicy massCraftingPolicy,
@@ -345,7 +345,7 @@ public final class RecipePlanner {
 
         private List<SearchResult> search(
                 Item target,
-                RecipeDisplayId finalRecipe,
+                RecipeHolder<?> finalRecipe,
                 int quantity,
                 BooleanSupplier cancellation,
                 boolean collectSteps
@@ -355,7 +355,7 @@ public final class RecipePlanner {
 
         private List<SearchResult> search(
                 Item target,
-                RecipeDisplayId finalRecipe,
+                RecipeHolder<?> finalRecipe,
                 int quantity,
                 BooleanSupplier cancellation,
                 boolean collectSteps,
@@ -486,7 +486,7 @@ public final class RecipePlanner {
                 PlanningInventory inventory,
                 Set<Item> path,
                 int depth,
-                Map<Item, RecipeDisplayId> recipeLocks
+                Map<Item, RecipeHolder<?>> recipeLocks
         ) {
             ensureNotCancelled();
             if (depth >= maxSearchDepth || !path.add(item)) {
@@ -511,7 +511,7 @@ public final class RecipePlanner {
 
         private List<SearchResult> produceUsingRecipe(
                 Item item,
-                RecipeDisplayId recipe,
+                RecipeHolder<?> recipe,
                 int quantity,
                 PlanningInventory inventory,
                 Set<Item> path,
@@ -596,7 +596,7 @@ public final class RecipePlanner {
                 int depth,
                 RequirementMode requirementMode,
                 RawRecipeFilter rawRecipeFilter,
-                Map<Item, RecipeDisplayId> recipeLocks
+                Map<Item, RecipeHolder<?>> recipeLocks
         ) {
             return produceRecipeCandidates(
                     item,
@@ -619,19 +619,19 @@ public final class RecipePlanner {
                 int depth,
                 RequirementMode requirementMode,
                 RawRecipeFilter rawRecipeFilter,
-                RecipeDisplayId requiredRecipe,
-                Map<Item, RecipeDisplayId> recipeLocks
+                RecipeHolder<?> requiredRecipe,
+                Map<Item, RecipeHolder<?>> recipeLocks
         ) {
             StableTopK<SearchResult> candidates = bestCandidates();
             for (RecipeIndex.ResolvedRecipe recipe : recipeIndex.recipesProducing(item)) {
                 ensureNotCancelled();
-                if (requiredRecipe != null && !recipe.entry().id().equals(requiredRecipe)) {
+                if (requiredRecipe != null && !recipe.entry().id().equals(requiredRecipe.id())) {
                     continue;
                 }
-                RecipeDisplayId lockedRecipe = recipeLocks.get(item);
+                RecipeHolder<?> lockedRecipe = recipeLocks.get(item);
                 if (lockRecipePaths
                         && lockedRecipe != null
-                        && !recipe.entry().id().equals(lockedRecipe)) {
+                        && !recipe.entry().id().equals(lockedRecipe.id())) {
                     continue;
                 }
                 if (!recipe.supports(craftingGrid)) {
@@ -664,7 +664,7 @@ public final class RecipePlanner {
                 long overproduction = producedCount - quantity;
                 SearchResult candidateStart = SearchResult.empty(inventory, recipeLocks);
                 if (lockRecipePaths) {
-                    candidateStart = candidateStart.withRecipeLock(item, recipe.entry().id());
+                    candidateStart = candidateStart.withRecipeLock(item, recipe.entry());
                 }
                 List<SearchResult> satisfiedRequirements = satisfyRequirements(
                         requirements,
@@ -1043,7 +1043,7 @@ public final class RecipePlanner {
             int maximumDependencyDepth,
             long missingItemCount,
             Map<Item, Integer> missingItems,
-            Map<Item, RecipeDisplayId> recipeLocks
+            Map<Item, RecipeHolder<?>> recipeLocks
     ) {
         private static SearchResult empty(PlanningInventory inventory) {
             return empty(inventory, Map.of());
@@ -1051,7 +1051,7 @@ public final class RecipePlanner {
 
         private static SearchResult empty(
                 PlanningInventory inventory,
-                Map<Item, RecipeDisplayId> recipeLocks
+                Map<Item, RecipeHolder<?>> recipeLocks
         ) {
             return new SearchResult(
                     inventory,
@@ -1098,16 +1098,16 @@ public final class RecipePlanner {
             );
         }
 
-        private SearchResult withRecipeLock(Item item, RecipeDisplayId recipe) {
-            RecipeDisplayId existing = recipeLocks.get(item);
-            if (recipe.equals(existing)) {
+        private SearchResult withRecipeLock(Item item, RecipeHolder<?> recipe) {
+            RecipeHolder<?> existing = recipeLocks.get(item);
+            if (existing != null && recipe.id().equals(existing.id())) {
                 return this;
             }
             if (existing != null) {
                 throw new IllegalStateException("Conflicting recipe lock for " + item);
             }
 
-            Map<Item, RecipeDisplayId> expandedRecipeLocks = new LinkedHashMap<>(recipeLocks);
+            Map<Item, RecipeHolder<?>> expandedRecipeLocks = new LinkedHashMap<>(recipeLocks);
             expandedRecipeLocks.put(item, recipe);
             return new SearchResult(
                     inventory,

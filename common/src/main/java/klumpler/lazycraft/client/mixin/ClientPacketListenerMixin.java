@@ -1,7 +1,7 @@
 package klumpler.lazycraft.client.mixin;
 
 import klumpler.lazycraft.client.recipebook.RecipeBookEvents;
-import net.minecraft.client.ClientRecipeBook;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -13,9 +13,7 @@ public class ClientPacketListenerMixin {
     @Inject(
             method = {
                     "handleContainerSetSlot",
-                    "handleContainerContent",
-                    "handleSetCursorItem",
-                    "handleSetPlayerInventory"
+                    "handleContainerContent"
             },
             at = @At("TAIL")
     )
@@ -23,8 +21,10 @@ public class ClientPacketListenerMixin {
         RecipeBookEvents.inventoryChanged();
     }
 
-    @Inject(method = "refreshRecipeBook", at = @At("TAIL"))
-    private void lazycraft$recipesChanged(ClientRecipeBook recipeBook, CallbackInfo ci) {
-        RecipeBookEvents.recipesChanged(recipeBook);
+    @Inject(method = {"handleUpdateRecipes", "handleAddOrRemoveRecipes"}, at = @At("TAIL"))
+    private void lazycraft$recipesChanged(CallbackInfo ci) {
+        if (Minecraft.getInstance().player != null) {
+            RecipeBookEvents.recipesChanged(Minecraft.getInstance().player.getRecipeBook());
+        }
     }
 }

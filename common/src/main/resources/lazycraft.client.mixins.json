@@ -5,7 +5,6 @@
   "client": [
     "AbstractRecipeBookScreenMixin",
     "ClientPacketListenerMixin",
-    "GhostSlotsAccessor",
     "MultiPlayerGameModeMixin",
     "RecipeBookComponentMixin",
     "RecipeBookPageMixin",

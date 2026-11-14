@@ -1,7 +1,9 @@
 package klumpler.lazycraft.client.planner;
 
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.AbstractCraftingMenu;
+import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.inventory.RecipeBookMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -24,8 +26,9 @@ final class PlanningInventory {
     static PlanningInventory from(Player player) {
         Objects.requireNonNull(player, "player cannot be null");
         int inventorySize = player.getInventory().getContainerSize();
-        List<Slot> inputSlots = player.containerMenu instanceof AbstractCraftingMenu menu
-                ? menu.getInputGridSlots()
+        List<Slot> inputSlots = player.containerMenu instanceof CraftingMenu
+                || player.containerMenu instanceof InventoryMenu
+                ? inputGridSlots((RecipeBookMenu<?, ?>) player.containerMenu)
                 : List.of();
         int capacity = inventorySize + inputSlots.size() + 1;
         Item[] items = TL_ITEMS.get();
@@ -62,6 +65,11 @@ final class PlanningInventory {
                 Arrays.copyOf(counts, size),
                 size
         );
+    }
+
+    private static List<Slot> inputGridSlots(RecipeBookMenu<?, ?> menu) {
+        int firstInputSlot = menu.getResultSlotIndex() + 1;
+        return menu.slots.subList(firstInputSlot, firstInputSlot + menu.getSize());
     }
 
     private static int addToBuffer(Item[] items, int[] counts, int size, Item item, int count) {

@@ -6,16 +6,10 @@ import klumpler.lazycraft.client.planner.CraftingExecutor;
 import klumpler.lazycraft.client.planner.RecipePlanner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
-import net.minecraft.util.context.ContextMap;
-import net.minecraft.world.inventory.AbstractCraftingMenu;
-import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.*;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.display.RecipeDisplay;
-import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
-import net.minecraft.world.item.crafting.display.RecipeDisplayId;
-import net.minecraft.world.item.crafting.display.SlotDisplayContext;
-
-import java.util.function.Consumer;
+import net.minecraft.world.item.crafting.RecipeHolder;
 
 public final class RecipeBookCrafting {
     private RecipeBookCrafting() {
@@ -23,11 +17,10 @@ public final class RecipeBookCrafting {
 
     public static boolean tryPlaceRecipe(
             RecipeCollection recipeCollection,
-            RecipeDisplayId recipe,
-            RecipeDisplayId lastPlacedRecipe,
+            RecipeHolder<?> recipe,
+            RecipeHolder<?> ghostRecipe,
             boolean hasGhostRecipe,
             boolean craftMaximum,
-            Consumer<RecipeDisplay> restoreGhostRecipe,
             Runnable clearGhostRecipe
     ) {
         LazyCraftConfig config = LazyCraftConfigManager.get();
@@ -36,23 +29,14 @@ public final class RecipeBookCrafting {
         }
 
         if (recipeCollection.isCraftable(recipe)) {
-            return recipe.equals(lastPlacedRecipe)
-                    && !hasGhostRecipe
-                    && takePlacedResultsToInventory(
-                    recipeCollection,
-                    recipe,
-                    craftMaximum
-            );
+            return !hasGhostRecipe
+                    && takePlacedResultsToInventory(recipeCollection, recipe, craftMaximum);
         }
+
         if (!config.recursiveRecipeBookCrafting
-                || !recipe.equals(lastPlacedRecipe)
                 || !hasGhostRecipe
-                || !executePlan(
-                recipeCollection,
-                recipe,
-                false,
-                craftMaximum
-        )) {
+                || !sameRecipe(recipe, ghostRecipe)
+                || !executePlan(recipeCollection, recipe, false, craftMaximum)) {
             return false;
         }
 
@@ -62,41 +46,37 @@ public final class RecipeBookCrafting {
 
     public static boolean tryTakeGhostResult(
             Slot slot,
-            RecipeDisplayId lastPlacedRecipe,
+            RecipeHolder<?> lastRecipe,
             RecipeCollection lastRecipeCollection,
             boolean hasGhostRecipe,
             boolean craftMaximum,
-            Consumer<RecipeDisplay> restoreGhostRecipe,
             Runnable clearGhostRecipe
     ) {
         Minecraft minecraft = Minecraft.getInstance();
         LazyCraftConfig config = LazyCraftConfigManager.get();
+        RecipeBookMenu<?, ?> menu = craftingMenu(minecraft.player);
         if (!config.recipeBookCrafting
                 || !config.recursiveRecipeBookCrafting
                 || CraftingExecutor.isExecuting()
                 || !hasGhostRecipe
-                || lastPlacedRecipe == null
+                || lastRecipe == null
                 || lastRecipeCollection == null
                 || minecraft.player == null
-                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)
-                || slot != menu.getResultSlot()
-                || !slot.getItem().isEmpty()
-                || !executePlan(
-                lastRecipeCollection,
-                lastPlacedRecipe,
-                true,
-                craftMaximum
-        )) {
+                || menu == null
+                || slot != resultSlot(menu)
+                || !slot.getItem().isEmpty()) {
             return false;
         }
 
-        clearGhostRecipe.run();
+        if (executePlan(lastRecipeCollection, lastRecipe, true, craftMaximum)) {
+            clearGhostRecipe.run();
+        }
         return true;
     }
 
     public static boolean executePlan(
             RecipeCollection recipeCollection,
-            RecipeDisplayId recipe,
+            RecipeHolder<?> recipe,
             boolean takeResultToCursor,
             boolean craftMaximum
     ) {
@@ -105,26 +85,20 @@ public final class RecipeBookCrafting {
             return false;
         }
 
-        RecipeDisplayEntry entry = findRecipeEntry(recipeCollection, recipe);
-        if (entry == null) {
-            return false;
-        }
-
-        ContextMap context = SlotDisplayContext.fromLevel(minecraft.level);
-        ItemStack result = firstResult(entry, context);
+        ItemStack result = recipe.value().getResultItem(recipeCollection.registryAccess());
         if (result.isEmpty()) {
             return false;
         }
 
-        Runnable restoreRecipe = () -> placeRecipe(minecraft, entry.id(), craftMaximum);
+        Runnable restoreRecipe = () -> placeRecipe(minecraft, recipe, craftMaximum);
         return (craftMaximum
                 ? RecipePlanner.planMaximum(
                 result.getItem(),
-                entry.id(),
+                recipe,
                 result.getCount(),
                 maximumOutputItems(result, takeResultToCursor)
         )
-                : RecipePlanner.plan(result.getItem(), entry.id()))
+                : RecipePlanner.plan(result.getItem(), recipe))
                 .map(plan -> takeResultToCursor
                         ? CraftingExecutor.executeToCursor(plan, restoreRecipe)
                         : CraftingExecutor.execute(plan, restoreRecipe))
@@ -137,8 +111,8 @@ public final class RecipeBookCrafting {
         }
 
         Minecraft minecraft = Minecraft.getInstance();
-        if (!(minecraft.player != null
-                && minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
+        RecipeBookMenu<?, ?> menu = craftingMenu(minecraft.player);
+        if (menu == null) {
             return result.getMaxStackSize();
         }
 
@@ -157,72 +131,68 @@ public final class RecipeBookCrafting {
 
     public static boolean takePlacedResultsToInventory(
             RecipeCollection recipeCollection,
-            RecipeDisplayId recipe,
+            RecipeHolder<?> recipe,
             boolean craftMaximum
     ) {
         Minecraft minecraft = Minecraft.getInstance();
+        RecipeBookMenu<?, ?> menu = craftingMenu(minecraft.player);
         if (minecraft.level == null
                 || minecraft.player == null
                 || minecraft.gameMode == null
-                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
+                || menu == null) {
             return false;
         }
 
-        ItemStack result = menu.getResultSlot().getItem();
-        RecipeDisplayEntry entry = findRecipeEntry(recipeCollection, recipe);
-        if (result.isEmpty() || entry == null) {
-            return false;
-        }
-
-        ContextMap context = SlotDisplayContext.fromLevel(minecraft.level);
-        ItemStack expectedResult = firstResult(entry, context);
-        if (!ItemStack.isSameItemSameComponents(result, expectedResult)
+        ItemStack result = resultSlot(menu).getItem();
+        ItemStack expectedResult = recipe.value().getResultItem(recipeCollection.registryAccess());
+        if (result.isEmpty()
+                || !ItemStack.isSameItemSameComponents(result, expectedResult)
                 || result.getCount() != expectedResult.getCount()
                 || !menu.getCarried().isEmpty()) {
             return false;
         }
 
-        Runnable restoreRecipe = () -> placeRecipe(minecraft, entry.id(), craftMaximum);
+        Runnable restoreRecipe = () -> placeRecipe(minecraft, recipe, craftMaximum);
         return CraftingExecutor.takePlacedResultsToInventory(
                 result,
                 restoreRecipe,
                 craftMaximum,
-                entry.id()
+                recipe
         );
     }
 
     private static void placeRecipe(
             Minecraft minecraft,
-            RecipeDisplayId recipe,
+            RecipeHolder<?> recipe,
             boolean craftMaximum
     ) {
-        if (minecraft.player == null
-                || minecraft.gameMode == null
-                || !(minecraft.player.containerMenu instanceof AbstractCraftingMenu menu)) {
+        if (minecraft.player == null || minecraft.gameMode == null) {
+            return;
+        }
+        RecipeBookMenu<?, ?> menu = craftingMenu(minecraft.player);
+        if (menu == null) {
             return;
         }
 
         minecraft.gameMode.handlePlaceRecipe(menu.containerId, recipe, craftMaximum);
     }
 
-    private static RecipeDisplayEntry findRecipeEntry(
-            RecipeCollection recipeCollection,
-            RecipeDisplayId recipe
-    ) {
-        for (RecipeDisplayEntry entry : recipeCollection.getRecipes()) {
-            if (entry.id().equals(recipe)) {
-                return entry;
-            }
+    private static RecipeBookMenu<?, ?> craftingMenu(Player player) {
+        if (player == null) {
+            return null;
+        }
+        AbstractContainerMenu menu = player.containerMenu;
+        if (menu instanceof CraftingMenu || menu instanceof InventoryMenu) {
+            return (RecipeBookMenu<?, ?>) menu;
         }
         return null;
     }
 
-    private static ItemStack firstResult(RecipeDisplayEntry entry, ContextMap context) {
-        for (ItemStack result : entry.resultItems(context)) {
-            if (!result.isEmpty()) {
-                return result;
-            }
-        }
-        return ItemStack.EMPTY;
+    private static Slot resultSlot(RecipeBookMenu<?, ?> menu) {
+        return menu.slots.get(menu.getResultSlotIndex());
+    }
+
+    private static boolean sameRecipe(RecipeHolder<?> first, RecipeHolder<?> second) {
+        return first != null && second != null && first.id().equals(second.id());
     }
 }

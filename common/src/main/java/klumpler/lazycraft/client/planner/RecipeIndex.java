@@ -4,12 +4,12 @@ import klumpler.lazycraft.LazyCraft;
 import klumpler.lazycraft.client.recipebook.VisibleRecipeCraftability;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.recipebook.RecipeCollection;
-import net.minecraft.util.context.ContextMap;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
-import net.minecraft.world.item.crafting.display.*;
+import net.minecraft.world.item.crafting.RecipeHolder;
 
 import java.util.*;
 
@@ -29,30 +29,30 @@ public final class RecipeIndex {
             return;
         }
 
-        ContextMap context = SlotDisplayContext.fromLevel(level);
         Map<Item, List<ResolvedRecipe>> rebuiltResolvedIndex = new HashMap<>();
-        Map<RecipeDisplayId, Item> rebuiltPrimaryOutputs = new HashMap<>();
+        Map<RecipeHolder<?>, Item> rebuiltPrimaryOutputs = new HashMap<>();
         Set<Item> rebuiltOutputOrder = new LinkedHashSet<>();
         int indexedResultCount = 0;
 
         for (RecipeCollection collection : collections) {
-            for (RecipeDisplayEntry entry : collection.getRecipes()) {
-                List<ItemStack> resultItems = entry.resultItems(context);
-                ResolvedRecipe resolvedRecipe = ResolvedRecipe.resolve(entry, resultItems, context);
-
-                for (ItemStack output : resultItems) {
-                    if (output.isEmpty()) {
-                        continue;
-                    }
-
-                    if (rebuiltPrimaryOutputs.putIfAbsent(entry.id(), output.getItem()) == null) {
-                        rebuiltOutputOrder.add(output.getItem());
-                    }
-                    rebuiltResolvedIndex
-                            .computeIfAbsent(output.getItem(), ignored -> new ArrayList<>())
-                            .add(resolvedRecipe);
-                    indexedResultCount++;
+            for (RecipeHolder<?> entry : collection.getRecipes()) {
+                if (!(entry.value() instanceof CraftingRecipe)) {
+                    continue;
                 }
+
+                ItemStack output = entry.value().getResultItem(collection.registryAccess());
+                if (output.isEmpty()) {
+                    continue;
+                }
+
+                ResolvedRecipe resolvedRecipe = ResolvedRecipe.resolve(entry, output);
+                if (rebuiltPrimaryOutputs.putIfAbsent(entry, output.getItem()) == null) {
+                    rebuiltOutputOrder.add(output.getItem());
+                }
+                rebuiltResolvedIndex
+                        .computeIfAbsent(output.getItem(), ignored -> new ArrayList<>())
+                        .add(resolvedRecipe);
+                indexedResultCount++;
             }
         }
 
@@ -79,7 +79,7 @@ public final class RecipeIndex {
         return resolvedSnapshot.generation;
     }
 
-    public static Item primaryOutputOrNull(RecipeDisplayId recipe) {
+    public static Item primaryOutputOrNull(RecipeHolder<?> recipe) {
         Objects.requireNonNull(recipe, "recipe cannot be null");
         return resolvedSnapshot.primaryOutputs.get(recipe);
     }
@@ -93,22 +93,16 @@ public final class RecipeIndex {
         return Collections.unmodifiableMap(index);
     }
 
-    private enum Layout {
-        SHAPED,
-        SHAPELESS,
-        OTHER
-    }
-
     static final class Snapshot {
         private final long generation;
         private final Map<Item, List<ResolvedRecipe>> recipesByOutput;
-        private final Map<RecipeDisplayId, Item> primaryOutputs;
+        private final Map<RecipeHolder<?>, Item> primaryOutputs;
         private final List<Item> primaryOutputItems;
 
         private Snapshot(
                 long generation,
                 Map<Item, List<ResolvedRecipe>> recipesByOutput,
-                Map<RecipeDisplayId, Item> primaryOutputs,
+                Map<RecipeHolder<?>, Item> primaryOutputs,
                 List<Item> primaryOutputItems
         ) {
             this.generation = generation;
@@ -135,99 +129,53 @@ public final class RecipeIndex {
     }
 
     static final class ResolvedRecipe {
-        private final RecipeDisplayEntry entry;
+        private final RecipeHolder<?> entry;
         private final Optional<List<Set<Item>>> requirements;
         private final List<ResolvedOutput> outputs;
-        private final boolean usesCraftingTable;
-        private final Layout layout;
-        private final int layoutWidth;
-        private final int layoutHeight;
 
         private ResolvedRecipe(
-                RecipeDisplayEntry entry,
+                RecipeHolder<?> entry,
                 Optional<List<Set<Item>>> requirements,
-                List<ResolvedOutput> outputs,
-                boolean usesCraftingTable,
-                Layout layout,
-                int layoutWidth,
-                int layoutHeight
+                List<ResolvedOutput> outputs
         ) {
             this.entry = entry;
             this.requirements = requirements;
             this.outputs = outputs;
-            this.usesCraftingTable = usesCraftingTable;
-            this.layout = layout;
-            this.layoutWidth = layoutWidth;
-            this.layoutHeight = layoutHeight;
         }
 
         private static ResolvedRecipe resolve(
-                RecipeDisplayEntry entry,
-                List<ItemStack> resultItems,
-                ContextMap context
+                RecipeHolder<?> entry,
+                ItemStack result
         ) {
-            Optional<List<Set<Item>>> requirements = resolveRequirements(entry, context);
-            List<ResolvedOutput> outputs = new ArrayList<>(resultItems.size());
-            for (ItemStack stack : resultItems) {
-                if (!stack.isEmpty()) {
-                    outputs.add(new ResolvedOutput(stack.getItem(), stack.getCount()));
-                }
-            }
-
-            boolean usesCraftingTable = false;
-            for (ItemStack station : entry.display().craftingStation().resolveForStacks(context)) {
-                if (station.is(Items.CRAFTING_TABLE)) {
-                    usesCraftingTable = true;
-                    break;
-                }
-            }
-
-            Layout layout = Layout.OTHER;
-            int layoutWidth = 0;
-            int layoutHeight = 0;
-            if (entry.display() instanceof ShapedCraftingRecipeDisplay shaped) {
-                layout = Layout.SHAPED;
-                layoutWidth = shaped.width();
-                layoutHeight = shaped.height();
-            } else if (entry.display() instanceof ShapelessCraftingRecipeDisplay shapeless) {
-                layout = Layout.SHAPELESS;
-                layoutWidth = shapeless.ingredients().size();
-            }
-
+            Optional<List<Set<Item>>> requirements = resolveRequirements(entry);
             return new ResolvedRecipe(
                     entry,
                     requirements,
-                    List.copyOf(outputs),
-                    usesCraftingTable,
-                    layout,
-                    layoutWidth,
-                    layoutHeight
+                    List.of(new ResolvedOutput(result.getItem(), result.getCount()))
             );
         }
 
-        private static Optional<List<Set<Item>>> resolveRequirements(
-                RecipeDisplayEntry entry,
-                ContextMap context
-        ) {
-            Optional<List<Ingredient>> ingredients = entry.craftingRequirements();
+        private static Optional<List<Set<Item>>> resolveRequirements(RecipeHolder<?> entry) {
+            List<Ingredient> ingredients = entry.value().getIngredients();
             if (ingredients.isEmpty()) {
                 return Optional.empty();
             }
 
-            List<Ingredient> recipeIngredients = ingredients.get();
-            List<Set<Item>> requirements = new ArrayList<>(recipeIngredients.size());
-            for (Ingredient ingredient : recipeIngredients) {
-                requirements.add(resolveIngredient(ingredient, context));
+            List<Set<Item>> requirements = new ArrayList<>(ingredients.size());
+            for (Ingredient ingredient : ingredients) {
+                if (ingredient.isEmpty()) {
+                    continue;
+                }
+                requirements.add(resolveIngredient(ingredient));
             }
-            return Optional.of(List.copyOf(requirements));
+            return requirements.isEmpty()
+                    ? Optional.empty()
+                    : Optional.of(List.copyOf(requirements));
         }
 
-        private static Set<Item> resolveIngredient(
-                Ingredient ingredient,
-                ContextMap context
-        ) {
+        private static Set<Item> resolveIngredient(Ingredient ingredient) {
             Set<Item> acceptedItems = new LinkedHashSet<>();
-            for (ItemStack stack : ingredient.display().resolveForStacks(context)) {
+            for (ItemStack stack : ingredient.getItems()) {
                 Item item = stack.getItem();
                 if (item != Items.AIR) {
                     acceptedItems.add(item);
@@ -236,7 +184,7 @@ public final class RecipeIndex {
             return Collections.unmodifiableSet(acceptedItems);
         }
 
-        RecipeDisplayEntry entry() {
+        RecipeHolder<?> entry() {
             return entry;
         }
 
@@ -245,16 +193,7 @@ public final class RecipeIndex {
         }
 
         boolean supports(CraftingGrid craftingGrid) {
-            if (craftingGrid.width() >= 3 && craftingGrid.height() >= 3) {
-                return usesCraftingTable;
-            }
-
-            return switch (layout) {
-                case SHAPED -> layoutWidth <= craftingGrid.width()
-                        && layoutHeight <= craftingGrid.height();
-                case SHAPELESS -> layoutWidth <= craftingGrid.width() * craftingGrid.height();
-                case OTHER -> false;
-            };
+            return entry.value().canCraftInDimensions(craftingGrid.width(), craftingGrid.height());
         }
 
         int outputCount(Item item) {
