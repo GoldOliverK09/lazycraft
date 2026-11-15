@@ -404,6 +404,12 @@ public final class CraftingExecutor {
             return;
         }
         if (stagedCrafts > 1) {
+            LazyCraft.LOGGER.warn(
+                    "Unexpected initial recipe amount: recipe={}, stagedCrafts={}, plannedCrafts={}",
+                    active.step.recipe().id(),
+                    stagedCrafts,
+                    active.remainingCrafts
+            );
             stop("the server placed an unexpected initial recipe amount");
             return;
         }
@@ -801,19 +807,13 @@ public final class CraftingExecutor {
         if (reason.contains("did not update")) {
             LazyCraft.LOGGER.warn("Maybe try increasing the crafting execution delay or update timeout?");
         }
-        Runnable callback = directCraft != null
-                ? directCraft.onComplete
-                : pendingDirectCraft != null
-                ? pendingDirectCraft.onComplete
-                : completionCallback;
+        // Completion callbacks restore the selected recipe in the crafting grid. Running
+        // one after an aborted plan can refill it with a bulk amount and poison the next run.
         directCraft = null;
         pendingDirectCraft = null;
         activeCraft = null;
         queuedCrafts.clear();
         completionCallback = null;
-        if (callback != null) {
-            callback.run();
-        }
     }
 
     private static void runCompletionCallback() {
