@@ -219,6 +219,17 @@ public final class CraftingExecutor {
         }
 
         if (activeCraft.ticksWaiting > executionUpdateTimeoutTicks) {
+            LazyCraft.LOGGER.warn(
+                    "Crafting timeout details: recipe={}, phase={}, waited={}/{}, menuState={}/{}, stagedCrafts={}/{}",
+                    activeCraft.step.recipe().id(),
+                    activeCraft.phase,
+                    activeCraft.ticksWaiting,
+                    executionUpdateTimeoutTicks,
+                    menu.getStateId(),
+                    activeCraft.expectedStateId,
+                    uniformStagedCrafts(menu),
+                    activeCraft.expectedStagedCrafts
+            );
             stop("the server did not update the crafting table in time");
             return;
         }
