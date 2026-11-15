@@ -32,7 +32,6 @@ public final class VisibleRecipeCraftability {
 
     private static final State EMPTY_STATE = State.empty();
 
-    // --- Reusable collections to avoid allocations ---
     private static final Map<RecipeHolder<?>, Item> REUSABLE_OUTPUT_BY_RECIPE = new HashMap<>(64);
     private static State activeState = EMPTY_STATE;
     private static Refresh refresh;
@@ -42,9 +41,7 @@ public final class VisibleRecipeCraftability {
     private static boolean shuttingDown;
     private static final Set<Item> REUSABLE_VISIBLE_OUTPUTS = new LinkedHashSet<>(64);
     private static final Deque<Item> REUSABLE_PENDING_OUTPUTS = new ArrayDeque<>(64);
-    // --- Generation & state ---
     private static long nextGeneration;
-    // --- DIRTY FLAGS: track what actually changed to avoid redundant work ---
     private static boolean environmentDirty = false;
     private static boolean visibleRecipesDirty = false;
     private static boolean recipeIndexDirty = false;
@@ -56,8 +53,6 @@ public final class VisibleRecipeCraftability {
     private VisibleRecipeCraftability() {
     }
 
-    // ==================== PUBLIC API ====================
-    // Added back the field since we now use it
     private static int lastSelectedCategory = -1;
 
     public static void beginRefresh() {
@@ -77,7 +72,6 @@ public final class VisibleRecipeCraftability {
             return;
         }
 
-        // CHEAP CHECK: can we reuse previous state?
         boolean canReuseState = previousState.matches(environment);
         long generation = previousState.generation;
         if (!canReuseState) {
@@ -89,7 +83,6 @@ public final class VisibleRecipeCraftability {
             }
         }
 
-        // REUSE MAPS instead of allocating new ones
         REUSABLE_OUTPUT_BY_RECIPE.clear();
         REUSABLE_VISIBLE_OUTPUTS.clear();
 
@@ -106,8 +99,7 @@ public final class VisibleRecipeCraftability {
             return;
         }
 
-        // Track visible recipes — use recipe ID as category proxy since getCategory() removed
-        int category = collection.hashCode(); // stable identity per collection instance
+        int category = collection.hashCode();
         if (category != lastSelectedCategory) {
             lastSelectedCategory = category;
             visibleRecipesDirty = true;
@@ -139,7 +131,7 @@ public final class VisibleRecipeCraftability {
         }
         activeState = finishedState;
         refresh = null;
-        visibleRecipesDirty = false; // CLEAR dirty flag after commit
+        visibleRecipesDirty = false;
         prioritizeVisibleWork();
         dispatchNextJob();
     }
@@ -225,41 +217,32 @@ public final class VisibleRecipeCraftability {
         return filterRevision;
     }
 
-    /**
-     * Called by mixin when player inventory changes.
-     */
+    // Called when player inventory changes.
     public static void inventoryChanged() {
         if (activeState != EMPTY_STATE) {
             environmentDirty = true;
         }
     }
 
-    /**
-     * Called by mixin when recipe book category/page changes.
-     */
+    // Called when recipe-book category or page changes.
     public static void recipeBookCategoryChanged() {
         visibleRecipesDirty = true;
-        environmentDirty = true; // also trigger revalidation
+        environmentDirty = true;
     }
 
-    /**
-     * Called by RecipeIndex when recipes reload.
-     */
+    // Called when the recipe index changes.
     public static void recipeIndexChanged() {
         recipeIndexDirty = true;
         environmentDirty = true;
     }
 
-    /** Main tick — now **only does heavy work when dirty flags are set**. */
     public static void tick(Minecraft minecraft) {
         if (shuttingDown) {
             return;
         }
 
-        // FAST CHEAP CHECKS — only set dirty flags, don't do heavy work yet
         checkCheapEnvironmentChanges(minecraft);
 
-        // If nothing dirty and no in-flight job, we're done
         if (!environmentDirty && !visibleRecipesDirty && !recipeIndexDirty && inFlightJob == null) {
             if (backgroundCooldownTicks > 0) {
                 backgroundCooldownTicks--;
@@ -267,19 +250,16 @@ public final class VisibleRecipeCraftability {
             return;
         }
 
-        // Handle dirty flags
         if (environmentDirty) {
             environmentDirty = false;
             revalidateEnvironment(minecraft);
         }
         if (visibleRecipesDirty) {
             visibleRecipesDirty = false;
-            // Visible recipes changed — prioritize those outputs
             prioritizeVisibleWork();
         }
         if (recipeIndexDirty) {
             recipeIndexDirty = false;
-            // Recipe index changed — full recalc needed
             if (activeState != EMPTY_STATE) {
                 long generation = ++nextGeneration;
                 cancelInFlightJob();
@@ -291,16 +271,12 @@ public final class VisibleRecipeCraftability {
             }
         }
 
-        // Dispatch next planning job (async, non-blocking)
         dispatchNextJob();
 
-        // Background cooldown
         if (inFlightJob == null && backgroundCooldownTicks > 0) {
             backgroundCooldownTicks--;
         }
     }
-
-    // ==================== CHEAP ENVIRONMENT CHECKS (no allocations) ====================
 
     private static void checkCheapEnvironmentChanges(Minecraft minecraft) {
         if (minecraft.player == null || minecraft.level == null) {
@@ -310,24 +286,19 @@ public final class VisibleRecipeCraftability {
             return;
         }
 
-        // 1. Player inventory version - use container's state ID or player's inventory version
-        // In 1.26.x, Inventory has no getVersion(). Use container state ID or player UUID + inventory hash.
         long invVersion = computeInventoryVersion(minecraft.player);
         if (invVersion != lastPlayerInventoryVersion) {
             lastPlayerInventoryVersion = invVersion;
             environmentDirty = true;
         }
 
-        // 2. Container ID change (crafting table vs inventory vs furnace)
         AbstractContainerMenu menu = minecraft.player.containerMenu;
-        // menu is never null when player is not null (always at least PlayerContainerMenu)
         int containerId = menu.containerId;
         if (containerId != lastPlayerContainerId) {
             lastPlayerContainerId = containerId;
             environmentDirty = true;
         }
 
-        // 3. Recipe index generation (data pack reload)
         long recipeGen = RecipeIndex.generation();
         if (recipeGen != lastRecipeIndexGeneration) {
             lastRecipeIndexGeneration = recipeGen;
@@ -335,21 +306,15 @@ public final class VisibleRecipeCraftability {
         }
     }
 
-    /**
-     * Computes a version hash for the player's inventory without allocating.
-     */
     private static long computeInventoryVersion(Player player) {
-        // Hash of carried item + inventory contents using container state ID as proxy
         AbstractContainerMenu menu = player.containerMenu;
-        long hash = menu.getStateId(); // changes on any slot change
+        long hash = menu.getStateId();
         ItemStack carried = menu.getCarried();
         if (!carried.isEmpty()) {
             hash ^= carried.getItem().hashCode() * 31L + carried.getCount();
         }
         return hash;
     }
-
-    // ==================== CORE LOGIC (behavior-preserving) ====================
 
     private static long invalidateCurrentWork() {
         long generation = ++nextGeneration;
@@ -398,7 +363,7 @@ public final class VisibleRecipeCraftability {
         }
 
         if (activeState.matches(currentEnvironment)) {
-            return; // no actual change
+            return;
         }
 
         RecipePlanner.PlanningSession session = captureSession(currentEnvironment);
@@ -480,18 +445,14 @@ public final class VisibleRecipeCraftability {
         return cause;
     }
 
-    // ==================== REUSABLE COLLECTION FACTORIES ====================
-
     private static Deque<Item> createPendingOutputs(Set<Item> visibleOutputs, Map<Item, Boolean> craftableByOutput) {
         REUSABLE_PENDING_OUTPUTS.clear();
 
-        // Visible outputs first (priority)
         for (Item output : visibleOutputs) {
             if (!craftableByOutput.containsKey(output)) {
                 REUSABLE_PENDING_OUTPUTS.addLast(output);
             }
         }
-        // Then all other known outputs
         for (Item output : RecipeIndex.primaryOutputs()) {
             if (!visibleOutputs.contains(output) && !craftableByOutput.containsKey(output)) {
                 REUSABLE_PENDING_OUTPUTS.addLast(output);
@@ -499,8 +460,6 @@ public final class VisibleRecipeCraftability {
         }
         return REUSABLE_PENDING_OUTPUTS;
     }
-
-    // ==================== INNER CLASSES (optimized for reuse) ====================
 
     private record Environment(
             Player player,
@@ -548,7 +507,6 @@ public final class VisibleRecipeCraftability {
         private final Environment environment;
         private final RecipePlanner.PlanningSession reusableSession;
         private final Map<Item, Boolean> craftableByOutput;
-        // Use reusable collections
         private final Map<RecipeHolder<?>, Item> outputByRecipe = REUSABLE_OUTPUT_BY_RECIPE;
         private final Set<Item> visibleOutputs = REUSABLE_VISIBLE_OUTPUTS;
 
@@ -570,12 +528,10 @@ public final class VisibleRecipeCraftability {
                 return EMPTY_STATE;
             }
 
-            // Create immutable snapshots for State
             Map<RecipeHolder<?>, Item> outputSnapshot = Map.copyOf(outputByRecipe);
             Set<Item> visibleSnapshot = Collections.unmodifiableSet(new LinkedHashSet<>(visibleOutputs));
             Deque<Item> pendingSnapshot = new ArrayDeque<>(createPendingOutputs(visibleSnapshot, craftableByOutput));
 
-            // Clear reusable collections for next refresh
             outputByRecipe.clear();
             visibleOutputs.clear();
 
@@ -657,7 +613,6 @@ public final class VisibleRecipeCraftability {
         }
 
         private State recalculate(long generation, Environment currentEnvironment, RecipePlanner.PlanningSession session) {
-            // Reuse the same outputByRecipe & visibleOutputs, new craftableByOutput map
             Deque<Item> newPending = new ArrayDeque<>(createPendingOutputs(visibleOutputs, Map.of()));
             return new State(
                     generation,

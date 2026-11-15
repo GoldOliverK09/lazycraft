@@ -74,7 +74,6 @@ final class PlanningInventory {
     }
 
     private static int addToBuffer(Item[] items, int[] counts, int size, Item item, int count) {
-        // Check if item already exists in buffer (linear search, small N)
         for (int i = 0; i < size; i++) {
             if (items[i] == item) {
                 counts[i] += count;

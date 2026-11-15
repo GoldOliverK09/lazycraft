@@ -219,7 +219,7 @@ public final class CraftingExecutor {
         }
 
         if (activeCraft.ticksWaiting > executionUpdateTimeoutTicks) {
-            LazyCraft.LOGGER.warn(
+            LazyCraft.LOGGER.debug(
                     "Crafting timeout details: recipe={}, phase={}, waited={}/{}, menuState={}/{}, stagedCrafts={}/{}, beforePlacement={}",
                     activeCraft.step.recipe().id(),
                     activeCraft.phase,
@@ -406,7 +406,7 @@ public final class CraftingExecutor {
             return;
         }
         if (stagedCrafts > 1) {
-            LazyCraft.LOGGER.warn(
+            LazyCraft.LOGGER.debug(
                     "Unexpected initial recipe amount: recipe={}, stagedCrafts={}, plannedCrafts={}, beforePlacement={}",
                     active.step.recipe().id(),
                     stagedCrafts,
@@ -811,8 +811,7 @@ public final class CraftingExecutor {
         if (reason.contains("did not update")) {
             LazyCraft.LOGGER.warn("Maybe try increasing the crafting execution delay or update timeout?");
         }
-        // Completion callbacks restore the selected recipe in the crafting grid. Running
-        // one after an aborted plan can refill it with a bulk amount and poison the next run.
+        // An aborted plan must not restore its recipe into the grid.
         directCraft = null;
         pendingDirectCraft = null;
         activeCraft = null;
