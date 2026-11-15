@@ -69,7 +69,8 @@ final class PlanningInventory {
 
     private static List<Slot> inputGridSlots(RecipeBookMenu<?, ?> menu) {
         int firstInputSlot = menu.getResultSlotIndex() + 1;
-        return menu.slots.subList(firstInputSlot, firstInputSlot + menu.getSize());
+        int gridSize = menu.getGridWidth() * menu.getGridHeight();
+        return menu.slots.subList(firstInputSlot, firstInputSlot + gridSize);
     }
 
     private static int addToBuffer(Item[] items, int[] counts, int size, Item item, int count) {

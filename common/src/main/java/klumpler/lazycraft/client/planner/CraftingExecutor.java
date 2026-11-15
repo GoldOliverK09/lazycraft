@@ -783,7 +783,8 @@ public final class CraftingExecutor {
 
     private static List<Slot> inputGridSlots(RecipeBookMenu<?, ?> menu) {
         int firstInputSlot = menu.getResultSlotIndex() + 1;
-        return menu.slots.subList(firstInputSlot, firstInputSlot + menu.getSize());
+        int gridSize = menu.getGridWidth() * menu.getGridHeight();
+        return menu.slots.subList(firstInputSlot, firstInputSlot + gridSize);
     }
 
     private static long countInventoryStack(Minecraft minecraft, ItemStack expected) {
