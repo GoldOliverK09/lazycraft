@@ -220,7 +220,7 @@ public final class CraftingExecutor {
 
         if (activeCraft.ticksWaiting > executionUpdateTimeoutTicks) {
             LazyCraft.LOGGER.warn(
-                    "Crafting timeout details: recipe={}, phase={}, waited={}/{}, menuState={}/{}, stagedCrafts={}/{}",
+                    "Crafting timeout details: recipe={}, phase={}, waited={}/{}, menuState={}/{}, stagedCrafts={}/{}, beforePlacement={}",
                     activeCraft.step.recipe().id(),
                     activeCraft.phase,
                     activeCraft.ticksWaiting,
@@ -228,7 +228,8 @@ public final class CraftingExecutor {
                     menu.getStateId(),
                     activeCraft.expectedStateId,
                     uniformStagedCrafts(menu),
-                    activeCraft.expectedStagedCrafts
+                    activeCraft.expectedStagedCrafts,
+                    activeCraft.stagedCraftsBeforePlacement
             );
             stop("the server did not update the crafting table in time");
             return;
@@ -382,6 +383,7 @@ public final class CraftingExecutor {
         active.expectedStagedCrafts = 1;
         active.batchTargetCrafts = 1;
         active.pendingBatchCrafts = 0;
+        active.stagedCraftsBeforePlacement = uniformStagedCrafts(menu);
         sendPlacement(minecraft, active, menu, Phase.WAITING_FOR_PLACEMENT);
     }
 
@@ -405,10 +407,11 @@ public final class CraftingExecutor {
         }
         if (stagedCrafts > 1) {
             LazyCraft.LOGGER.warn(
-                    "Unexpected initial recipe amount: recipe={}, stagedCrafts={}, plannedCrafts={}",
+                    "Unexpected initial recipe amount: recipe={}, stagedCrafts={}, plannedCrafts={}, beforePlacement={}",
                     active.step.recipe().id(),
                     stagedCrafts,
-                    active.remainingCrafts
+                    active.remainingCrafts,
+                    active.stagedCraftsBeforePlacement
             );
             stop("the server placed an unexpected initial recipe amount");
             return;
@@ -930,6 +933,7 @@ public final class CraftingExecutor {
         private int expectedStagedCrafts = 1;
         private int batchTargetCrafts = 1;
         private int pendingBatchCrafts;
+        private int stagedCraftsBeforePlacement;
         private ItemStack batchOutput = ItemStack.EMPTY;
         private long outputItemsBeforeBatch;
         private int outputItemsPerCraft;
