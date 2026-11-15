@@ -48,7 +48,7 @@ dependencies {
     compileOnly project(':common')
     clientRuntimeOnly commonMainSourceSet.get().output
     modCompileOnly "maven.modrinth:9s6osm5g:${cloth_config_fabric_version}" // Cloth Config API
-    modCompileOnly 'maven.modrinth:mOgUt4GM:YIfqIJ8q' // Mod Menu 11.0.3 for 1.21.1
+    modCompileOnly 'maven.modrinth:mOgUt4GM:YIfqIJ8q' // Mod Menu 11.0.3 for 1.21.x
 }
 
 def modVersion = project.version
@@ -56,12 +56,14 @@ def modVersion = project.version
 processResources {
     inputs.properties(
             version: modVersion,
-            minecraft_version_range: minecraft_version_range
+            minecraft_version_range: minecraft_version_range,
+            loader_version: loader_version
     )
     filesMatching('fabric.mod.json') {
         expand(
                 version: modVersion,
-                minecraft_version_range: minecraft_version_range
+                minecraft_version_range: minecraft_version_range,
+                loader_version: loader_version
         )
     }
 }
